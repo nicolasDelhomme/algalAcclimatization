@@ -15,7 +15,7 @@ if [ ! -d $out ]; then
 fi
 
 # run
-sbatch -n 32 -o $out/diamond.out \
--e $out/diamond.err ../UPSCb-common/pipeline/runDiamond.sh \
--m -s -i $mapping -n $nodes -t $names \
+sbatch -n 32 -o $out/diamond4b2g.out \
+-e $out/diamond4b2g.err ../UPSCb-common/pipeline/runDiamond4B2G0.sh \
+-i $mapping -n $nodes -t $names \
 -p 32 blastp $in/Trinity.fasta.transdecoder.pep $inx $out
