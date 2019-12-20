@@ -8,10 +8,14 @@
 #'    number_sections: true
 #' ---
 #' # Setup
+#' * Libraries
 suppressPackageStartupMessages(library(here))
 suppressPackageStartupMessages(library(magrittr))
 suppressPackageStartupMessages(library(RSQLite))
 suppressPackageStartupMessages(library(tidyverse))
+
+#' * Helpers
+source(here("UPSCb-common/src/R/expressionSpecificityUtility.R"))
 
 #' # Data
 #' ## Transdecoder
