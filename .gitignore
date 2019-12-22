@@ -51,3 +51,6 @@ taxonomy
 NCBI
 NCBI/
 
+# VennDiagram
+VennDiagram*.log
+

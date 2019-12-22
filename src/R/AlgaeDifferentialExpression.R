@@ -34,17 +34,8 @@ pal=brewer.pal(8,"Dark2")
 hpal <- colorRampPalette(c("blue","white","red"))(100)
 mar <- par("mar")
 
-#' TODO remember to add a function to check for correlation between logFC and 
-#' transcript length - check for the effective length
-
 #' * Functions
 #' 1. plot specific gene expression
-#' ```{r edit1, echo=FALSE,eval=FALSE}
-#' CHANGEME - here you need to change the variables in the 
-#' plot to display the expression values accross your samples
-#' The example below has 2 variables MGenotype and MDay. These 
-#' need replacing by the variable(s) of interest in your project
-#' ```
 "line_plot" <- function(dds=dds,vst=vst,gene_id=gene_id){
     message(paste("Plotting",gene_id))
     sel <- grepl(gene_id,rownames(vst))
@@ -52,7 +43,7 @@ mar <- par("mar")
 
     p <- ggplot(bind_cols(as.data.frame(colData(dds)),
                           data.frame(value=vst[sel,])),
-                aes(x=MDay,y=value,col=MGenotype,group=MGenotype)) +
+                aes(x=Time,y=value,col=Time,group=Time)) +
         geom_point() + geom_smooth() +
         scale_y_continuous(name="VST expression") + 
         ggtitle(label=paste("Expression for: ",gene_id))
@@ -85,13 +76,7 @@ mar <- par("mar")
         par(mar=mar)
     }
     
-    # a llok at independent filtering
-    if(verbose){
-        message(sprintf("The independent filtering cutoff is %s, removing %s of the data",
-                round(metadata(res)$filterThreshold,digits=5),
-                names(metadata(res)$filterThreshold)))
-    }
-    
+    # a look at independent filtering
     if(plot){
         plot(metadata(res)$filterNumRej,
              type="b", ylab="number of rejections",
@@ -169,14 +154,21 @@ mar <- par("mar")
         suppressMessages(suppressWarnings(plot(p)))
     }
     
-    sel <- res$padj <= padj & abs(res$log2FoldChange) >= lfc & ! is.na(res$padj) & res$baseMean >= expression_cutoff
+    sel <- res$padj <= padj & abs(res$log2FoldChange) >= lfc & ! is.na(res$padj) & 
+        res$baseMean >= expression_cutoff
     
     if(verbose){
         message(sprintf("There are %s genes that are DE with the following parameters: FDR <= %s, |log2FC| >= %s, base mean expression > %s",
                         sum(sel),
                         lfc,padj,expression_cutoff))
     }
-            
+    
+    val <- rowSums(vst[sel,sample_sel])==0
+    if (sum(val) >0){
+        warning(sprintf("There are %s DE genes that have no vst expression in the selected samples",sum(val)))
+        sel[sel][val] <- FALSE
+    }    
+        
     if(export){
         if(!dir.exists(default_dir)){
             dir.create(default_dir,showWarnings=FALSE,recursive=TRUE,mode="0771")
@@ -198,12 +190,7 @@ mar <- par("mar")
 }
 
 #' * Data
-#' ```{r load, echo=FALSE,eval=FALSE}
-#' CHANGEME - here you are meant to load an RData object
-#' that contains a DESeqDataSet object. If you ran the 
-#' biological QA template, you need not change anything
-#' ```
-load(here("data/analysis/salmon/dds.rda"))
+load(here("data/analysis/salmon/dds-sample-swap-corrected.rda"))
 
 #' ## Normalisation for visualisation
 vsd <- varianceStabilizingTransformation(dds,blind=FALSE)
@@ -213,16 +200,10 @@ dir.create(here("data/analysis/DE"),showWarnings=FALSE)
 save(vst,file=here("data/analysis/DE/vst-aware.rda"))
 
 #' ## Gene of interests
-#' ```{r load, echo=FALSE,eval=FALSE}
-#' CHANGEME - Here, you can plot the expression pattern of your gene of
-#' interest. You need to have a list of genes in a text file, one geneID per line
-#' The ID should exist in your vst data.
-#' Note that for the plot to work, you also need to edit the first function (`line_plot`)
-#' at the top of this file
-#' ```
-goi <- read_lines(here("doc/goi.txt"))
-stopifnot(all(goi %in% rownames(vst)))
-dev.null <- lapply(goi,line_plot,dds=dds,vst=vst)
+#' We do not have any goi at that time
+# goi <- read_lines(here("doc/goi.txt"))
+# stopifnot(all(goi %in% rownames(vst)))
+# dev.null <- lapply(goi,line_plot,dds=dds,vst=vst)
 
 #' ## Differential Expression
 dds <- DESeq(dds)
@@ -235,84 +216,96 @@ plotDispEsts(dds)
 resultsNames(dds)
 
 #' ## Results
-#' #' ```{r res, echo=FALSE,eval=FALSE}
-#' CHANGEME - here you need to define the contrast you want to 
-#' study - see the example in the next block. 
-#' 
-#' The `contrast` can be given
-#' by name, as a list (numerator/denominator) or as a vector of weight (e.g. c(0,1));
-#' read the DESeq2 vignette for more info
-#' 
-#' The `label` argument is typically one (or a combination) of the metadata stored in colData
-#' 
-#' The function allows for looking at the independent filtering results using `debug=TRUE`
-#' 
-#' If you are not satisfied with the default from DESeq2, you can set your own cutoff using `expression_cutoff`
-#' 
-#' You can change the default output file prefix using `default_prefix`
-#' 
-#' You can select the set of samples to be added to the `heatmap`, using the `sample_sel` argument. It takes a logical vector.
-#' 
-#' ```
-
-#' ```{r contrast, echo=FALSE,eval=FALSE}
-#'contrast1 <- extract_results(dds=dds,vst=vst,contrast="CHANGEME")
-#' ```
+# fail
+T1vsCtl <- extract_results(dds=dds,vst=vst,
+                           contrast="Time_60min_vs_std",
+                           default_prefix="DE-Time-1h-vs-std",
+                           labels=paste(dds$Time,dds$Replicate,sep="-"),
+                           sample_sel=dds$Time %in% c("60min","std"))
+T4vs1 <- extract_results(dds=dds,vst=vst,
+                         contrast=list("Time_4hrs_vs_std","Time_60min_vs_std"),
+                         default_prefix="DE-Time-4h-vs-1h",
+                         labels=paste(dds$Time,dds$Replicate,sep="-"),
+                         sample_sel=dds$Time %in% c("4hrs","60min"))
+T12vs4 <- extract_results(dds=dds,vst=vst,
+                          contrast=list("Time_12hrs_vs_std","Time_4hrs_vs_std"),
+                          default_prefix="DE-Time-12h-vs-4h",
+                          labels=paste(dds$Time,dds$Replicate,sep="-"),
+                          sample_sel=dds$Time %in% c("12hrs","4hrs"))
+T24vs12 <- extract_results(dds=dds,vst=vst,contrast=list("Time_24hrs_vs_std","Time_12hrs_vs_std"),
+                           default_prefix="DE-Time-24h-vs-12h",
+                           labels=paste(dds$Time,dds$Replicate,sep="-"),
+                           sample_sel=dds$Time %in% c("24hrs","12hrs"))
+T72vs24 <- extract_results(dds=dds,vst=vst,contrast=list("Time_72hrs_vs_std","Time_24hrs_vs_std"),
+                           default_prefix="DE-Time-72h-vs-24h",
+                           labels=paste(dds$Time,dds$Replicate,sep="-"),
+                           sample_sel=dds$Time %in% c("72hrs","24hrs"))
+T120vs72 <- extract_results(dds=dds,vst=vst,contrast=list("Time_120hrs_vs_std","Time_72hrs_vs_std"),
+                            default_prefix="DE-Time-120h-vs-72h",
+                            labels=paste(dds$Time,dds$Replicate,sep="-"),
+                            sample_sel=dds$Time %in% c("120hrs","72hrs"))
 
 #' ### Venn Diagram
-#' ```{r venn, echo=FALSE,eval=FALSE}
-#' CHANGEME - Here, you typically would have run several contrasts and you want
-#' to assess their overlap plotting VennDiagrams.
-#' 
-#' In the examples below, we assume that these resutls have been saved in a list
-#' called `res.list`
-#' ```
+res.list <- list(T1vsCtl=T1vsCtl,
+                 T4vs1=T4vs1,
+                 T12vs4=T12vs4,
+                 T24vs12=T24vs12,
+                 T72vs24=T72vs24,
+                 T120vs72=T120vs72)
 
-#' #### All DE genes
-#' ```{r venn2, echo=FALSE,eval=FALSE}
-#'grid.newpage()
-#'grid.draw(venn.diagram(lapply(res.list,"[[","all"),
-#'                       NULL,
-#'                       fill=pal[1:3]))
-#' ```
+#' #### Fast response
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[1:2],"[[","all"),
+                       NULL,
+                       fill=pal[1:2]))
 
-#' #### DE genes (up in mutant)
-#' ```{r venn3, echo=FALSE,eval=FALSE}
-#'grid.newpage()
-#'grid.draw(venn.diagram(lapply(res.list,"[[","up"),
-#'                       NULL,
-#'                       fill=pal[1:3]))
-#' ```
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[1:2],"[[","up"),
+                       NULL,
+                       fill=pal[1:2]))
 
-#' #### DE genes (up in control)
-#' ```{r venn4, echo=FALSE,eval=FALSE}
-#'grid.newpage()
-#'grid.draw(venn.diagram(lapply(res.list,"[[","dn"),
-#'                       NULL,
-#'                       fill=pal[1:3]))
-#' ```
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[1:2],"[[","dn"),
+                       NULL,
+                       fill=pal[1:2]))
+
+#' #### Switch
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[2:4],"[[","all"),
+                       NULL,
+                       fill=pal[1:3]))
+
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[2:4],"[[","up"),
+                       NULL,
+                       fill=pal[1:3]))
+
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[2:4],"[[","dn"),
+                       NULL,
+                       fill=pal[1:3]))
+
+#' #### Acclimatization
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[4:6],"[[","all"),
+                       NULL,
+                       fill=pal[1:3]))
+
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[4:6],"[[","up"),
+                       NULL,
+                       fill=pal[1:3]))
+
+grid.newpage()
+grid.draw(venn.diagram(lapply(res.list[4:6],"[[","dn"),
+                       NULL,
+                       fill=pal[1:3]))
 
 #' ### Gene Ontology enrichment
-#' ```{r go, echo=FALSE,eval=FALSE}
-#' Once you have obtained a list of candidate genes, you most probably want
-#' to annotate them.
-#' 
-#' In the following example, we first identify the background; _i.e._ the
-#' population of expressed genes. We select the genes expressed in a least
-#' 2 replicate of one condition at a cutoff of `exp`.
-#' 
-#' Next we run the enrichment, in the example against `athaliana` using 
-#' the gofer3 REST API (interfaced through the gopher.R script loaded at the
-#' beginning of this fil).
-#' 
-#' Finally we export the go enrichment as a complete table and as a table consisting
-#' of only the `id` and `padj` columns. The latter can be used as input for _e.g._
-#' REVIGO.
-#' ```
-background <- rownames(vst)[featureSelect(vst,dds$MGenotype,exp=CHANGEME)]
+background <- rownames(vst)[featureSelect(vst,dds$Time,exp=1)]
 
 enr.list <- lapply(res.list,function(r){
-    lapply(r,gopher,background=background,task="go",url="athaliana")
+    lapply(r,gopher,background=background,task="go",url="algae")
 })
 
 dev.null <- lapply(names(enr.list),function(n){
