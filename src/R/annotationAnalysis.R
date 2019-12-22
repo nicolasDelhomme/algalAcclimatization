@@ -10,8 +10,11 @@
 #' # Setup
 #' * Libraries
 suppressPackageStartupMessages({
+  library(S4Vectors)
   library(here)
   library(igraph)
+  library(magrittr)
+  library(pander)
   library(RSQLite)
   library(tidyverse)
 })
@@ -19,67 +22,57 @@ suppressPackageStartupMessages({
 #' * Graphics
 mar <- par("mar")
 
-#' * B2G Annotation
-annot <- read_tsv(here("data/b2g/blast2go_20190117_export.txt.gz")) %>% 
+#' # Process
+#' ## B2G Annotation
+annot <- read_tsv(here("data/b2g/blast2go_20190117_export.txt.gz"),
+                  col_types = cols(
+                    .default = col_character(),
+                    `Sequence Length` = col_double(),
+                    `Annotation GO Count` = col_double(),
+                    `Blast Hits Count` = col_double(),
+                    `Blast Min E-Value` = col_double(),
+                    `Blast Top Hit E-Value` = col_double(),
+                    `Blast Top Hit Length` = col_double(),
+                    `Blast Top Hit Alignment Length` = col_double(),
+                    `Blast Top Hit Positives` = col_double(),
+                    `Blast Top Hit HSPs Number` = col_double(),
+                    `Blast Top Hit Frame` = col_double()
+                  )) %>% 
   filter(`Sequence Description` != "---NA---") %>% 
-  mutate(Tax=factor(gsub(".*Tax=| TaxID=.*","",`Sequence Description`)),
-         TaxID=factor(gsub(".*TaxID=| RepID=.*","",`Sequence Description`)),
-         MappingTaxID=factor(as.integer(names(
-           sapply(lapply(lapply(`Mapping Taxa ID`,table),sort,decreasing=TRUE),"[",1)))))
+  mutate(Tax=ifelse(grepl("Tax=",`Sequence Description`),
+                    gsub(".*Tax=| TaxID=.*","",`Sequence Description`),NA),
+         TaxID=factor(ifelse(grepl("TaxID=",`Sequence Description`),
+                             gsub(".*TaxID=| RepID=.*","",`Sequence Description`),NA)))
 
+#' Update some of the Taxonomy names
+df=data.frame(
+  from=c("Lyngbya sp.","Cyanothece sp.","Scenedesmus fuscus","Pediculus humanus subsp. corporis"),
+  to=c("Lyngbya","Cyanothece","Scenedesmus","Pediculus humanus"),stringsAsFactors = FALSE)
 
+uq <- unique(annot$Tax)
+mp <- lapply(df$from,grep,uq)
+uq[unlist(mp)] <- rep(df$to,elementNROWS(mp))
 
-#' # Taxonomy
-tab <- sort(table(annot$Tax),decreasing=TRUE)
-par(mar=c(12.1,4.1,0.1,0.1))
-barplot(tab,las=2)
-barplot(tab[1:10],las=2)
-par(mar=mar)
+annot %<>% mutate(Tax=factor(Tax,levels=unique(uq)))
 
-# ouch
-sum(annot$MappingTaxID==annot$TaxID,na.rm = TRUE)
-sum(grepl("^\\d+$",levels(annot$TaxID)))
-length(grepl("\\d+",levels(annot$TaxID)))
-# needs fixing too!
-# tail(levels(annot$TaxID))
-# [1] "UniRef90_Q9P0J0NADH dehydrogenase"                                      
-# [2] "UniRef90_R7YVC9Saccharopine dehydrogenase"                              
-# [3] "UniRef90_UPI00029B39775,10-methylenetetrahydrofolate reductase n=1 Tax="
-# [4] "UniRef90_UPI0006EAFD0F glycogen"                                        
-# [5] "UniRef90_UPI000D1B4B2DFAD-dependent oxidoreductase n=1 Tax="            
-# [6] "UniRef90_UPI000F74087Balcohol dehydrogenase"
+#' Validation
+stopifnot(all(grepl("^\\d+$",levels(annot$TaxID))))
 
-# load the database and check the mapping IDs
+#' ## Taxonomy
+#' Establish the connection
 con <- dbConnect(dbDriver("SQLite"),
                  dbname=here("taxonomy/20190820/taxonomy.sqlite"))
 
-ids <- unique(c(levels(annot$MappingTaxID),
-                levels(annot$TaxID)[grepl("^\\d+$",levels(annot$TaxID))]))
+#' ### Taxonomy ID - division mapping
+mids <- strsplit(annot$`Mapping Taxa ID`,"\\|")
+ids <- unique(c(na.omit(unique(unlist(mids))),levels(annot$TaxID)))
 taxid_divnames <- dbGetQuery(con, paste0("SELECT d.div_nam, n.tax_id FROM division AS d ",
                                          "LEFT JOIN node AS n ON d.div_id = n.div_id ",
                                          "WHERE n.tax_id IN (",
                                          paste(ids, collapse = ","),
                                          ")"))
 
-# Diversity: we get a lot of Viridiplantae
-barplot(table(taxid_divnames$div_nam),las=2)
-
-# Abundance
-tb <- table(annot$MappingTaxID)
-barplot(by(as.vector(tb[match(names(tb),taxid_divnames$tax_id)]),
-           taxid_divnames$div_nam,sum))
-
-tb <- table(annot$TaxID)
-tb <- tb[grepl("^\\d+$",names(tb))]
-m.sel <- match(names(tb),taxid_divnames$tax_id)
-barplot(by(as.vector(tb[m.sel]),
-           taxid_divnames$div_nam[m.sel],sum),las=2)
-
-# This is also fishy
-#head(levels(annot$Tax))
-# [1] ""                                   "50 kb inversion clade"             
-# [3] "Abrus precatorius"                  "Absidia glauca"              
-# Get the ones by name
+#' ### Taxonomy name - division mapping
 nam.div <- dbGetQuery(con,paste("SELECT d.div_nam, t.nam from division d",
                                 "LEFT JOIN node n ON d.div_id == n.div_id",
                                 "LEFT JOIN taxonomy t ON t.tid == n.tax_id",
@@ -87,46 +80,92 @@ nam.div <- dbGetQuery(con,paste("SELECT d.div_nam, t.nam from division d",
                                                          unique(gsub(" \\(.*| var\\..*","",levels(annot$Tax))),
                                                          "'",sep="",collapse=","),");"))
 
-barplot(table(nam.div$div_nam),las=2)
 
-tb <- table(gsub(" \\(.*| var\\..*","",annot$Tax))
-m.sel <- match(names(tb),nam.div$nam)
-barplot(by(as.vector(tb[m.sel]),
-           nam.div$div_nam[m.sel],sum),las=2)
-
-# find the Embryophyta / ChloroPhyta
+#' ### Embryophyta name and ID
 edges <- dbGetQuery(con,"SELECT tax_id, parent_id from node;")
 
-## get tax id
-taxids <- dbGetQuery(con,"SELECT tid, nam from taxonomy where nam in ('Chlorophyta','Embryophyta','Streptophyta','Viridiplantae')")
+#' Get the Embryophyta taxonomy ID
+ephyta <- dbGetQuery(con,"SELECT tid from taxonomy where nam == 'Embryophyta')")$tid
 
-## create the tax graph, break it at Chlorophyta and get the membership
+#' Create the taxonomy graph, break it at Embryophyta and extract 
+#' the members of the Embryophyta clade
 graph <- graph.edgelist(as.matrix(edges[!edges$parent_id %in% 
-                                          edges[edges$tax_id == 
-                                                  taxids[taxids$nam=="Embryophyta","tid"],
-                                                "parent_id"],]))
+                                          edges[edges$tax_id == ephyta,"parent_id"],]))
 mem <- clusters(graph)$membership
 
-## get the taxon name part of the Chlorophyta division
-ephylum <- dbGetQuery(con,paste("SELECT DISTINCT tid,nam from taxonomy WHERE tid in (",paste(which(mem==mem[taxids[taxids$nam=="Embryophyta","tid"]]),collapse=","),")"))
+#' And get their taxon name and ID
+ephylum <- dbGetQuery(con,paste("SELECT DISTINCT tid,nam from taxonomy WHERE tid in (",
+                                paste(which(mem==mem[ephyta]),collapse=","),")"))
 
-
-annot$Chlorophyta <- annot$UniRef90.taxon %in% cphylum
-table(annot$Chlorophyta)
-
+#' Done, disconnect
 dbDisconnect(con)
 
-# cross validate
+#' # Report
+#' ## Individual Taxon by name
+tab <- sort(table(annot$Tax),decreasing=TRUE)
+par(mar=c(12.1,4.1,0.1,0.1))
+barplot(tab,las=2)
+barplot(tab[1:10],las=2)
 
-# look at the GC vs expression of the unannotated sequences
+#' Add a column to the annot
+annot %<>% mutate(Tax.Div=nam.div$div_nam[match(levels(annot$Tax),
+                                                nam.div$nam)][as.integer(annot$Tax)])
 
+barplot(table(annot$Tax.Div),las=2)
 
-# select only the algae
-IDs <- taxa$ID[taxa$Tax == "Tetradesmus obliquus"]
+#' ## Individual Taxon by ID
+annot %<>% mutate(TaxID.Div=taxid_divnames$div_nam[match(levels(annot$TaxID),
+                                                         taxid_divnames$tax_id)][as.integer(annot$TaxID)])
 
-# do we have unique IDs
-sum(duplicated(sub("\\.p[0-9]+$","",IDs)))
-IDs <- sub("\\.p[0-9]+$","",IDs)
+barplot(table(annot$TaxID.Div),las=2)
 
-dir.create(here("data/analysis/annotation"),recursive = TRUE)
+#' We are in good agreement
+table(annot$Tax.Div == annot$TaxID.Div,useNA="ifany")
+
+#' ## Mapping Taxa by ID
+res <- lapply(split(taxid_divnames$div_nam[match(unlist(mids),taxid_divnames$tax_id)],
+                    rep(1:length(mids),elementNROWS(mids))),table)
+
+#' Most of the Mapping Taxon agree
+pander(table(elementNROWS(res)))
+barplot(table(elementNROWS(res)))
+
+#' Merge the names, merge the abundances
+annot %<>% mutate(MappingTaxIdDiv=factor(sapply(lapply(res,names),paste,collapse="|")),
+                  MappingTaxIdDivAbundance=sapply(lapply(res,as.integer),paste,collapse="|"))
+
+pander(table(annot$MappingTaxIdDiv))
+barplot(table(annot$MappingTaxIdDiv),las=2,cex.names=.8)
+
+annot %<>% mutate(MappingTaxIdViridiplantae=as.integer(MappingTaxIdDiv) %in% 
+                    which(grepl("Viridiplantae",levels(MappingTaxIdDiv))))
+
+table(annot$MappingTaxIdViridiplantae)
+
+#' Again we are in good agreement
+sum(annot$MappingTaxIdViridiplantae & annot$Tax.Div == "Viridiplantae",na.rm = TRUE)
+par(mar=mar)
+
+#' # Select
+#' We base the selection on the IDs retrieved from the TaxID 
+#' (the uniref diamond annotation)
+annot %<>% mutate(TaxIdEmbryophyta=annot$TaxID %in% ephylum$tid)
+message(sprintf("There are %s sequences annotated as land plants (Embryophyta))",sum(annot$TaxIdEmbryophyta)))
+
+#' # Export
+IDs <- annot$`Sequence Name`[annot$Tax.Div == "Viridiplantae" & ! annot$TaxIdEmbryophyta & ! is.na(annot$Tax.Div)]
+IDs <- sub("\\.p[0-9]+","",IDs)
+
+dir.create(here("data/analysis/annotation"),recursive = TRUE,showWarnings = FALSE)
+
 write(as.character(IDs),here("data/analysis/annotation/algae-IDs.txt"))
+
+#' # Conclusion
+#' We have 49,477 sequence that are identified as being of algal origin
+#' There are many more sequences that we could try to identify based on 
+#' a GC / expression grouping (possibly) - or run a ML approach.
+
+#' # Session Info
+#' ```{r session info, echo=FALSE}
+#' sessionInfo()
+#' ```
