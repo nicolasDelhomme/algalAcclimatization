@@ -85,7 +85,7 @@ nam.div <- dbGetQuery(con,paste("SELECT d.div_nam, t.nam from division d",
 edges <- dbGetQuery(con,"SELECT tax_id, parent_id from node;")
 
 #' Get the Embryophyta taxonomy ID
-ephyta <- dbGetQuery(con,"SELECT tid from taxonomy where nam == 'Embryophyta')")$tid
+ephyta <- dbGetQuery(con,"SELECT tid from taxonomy where nam == 'Embryophyta'")$tid
 
 #' Create the taxonomy graph, break it at Embryophyta and extract 
 #' the members of the Embryophyta clade
