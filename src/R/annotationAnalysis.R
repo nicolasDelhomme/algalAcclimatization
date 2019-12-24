@@ -160,6 +160,8 @@ dir.create(here("data/analysis/annotation"),recursive = TRUE,showWarnings = FALS
 
 write(as.character(IDs),here("data/analysis/annotation/algae-IDs.txt"))
 
+write_tsv(annot,path=here("data/analysis/annotation/blast2go_20190117_Taxonomy-resolved.txt"))
+
 #' # Conclusion
 #' We have 49,477 sequence that are identified as being of algal origin
 #' There are many more sequences that we could try to identify based on 

@@ -11,7 +11,7 @@
 
 <meta name="author" content="Nicolas Delhomme" />
 
-<meta name="date" content="2019-12-22" />
+<meta name="date" content="2019-12-23" />
 
 <title>Annotation analysis</title>
 
@@ -365,7 +365,7 @@ summary {
 
 <h1 class="title toc-ignore">Annotation analysis</h1>
 <h4 class="author">Nicolas Delhomme</h4>
-<h4 class="date">2019-12-22</h4>
+<h4 class="date">2019-12-23</h4>
 
 </div>
 
@@ -1421,7 +1421,9 @@ IDs &lt;- sub(&quot;\\.p[0-9]+&quot;,&quot;&quot;,IDs)
 
 dir.create(here(&quot;data/analysis/annotation&quot;),recursive = TRUE,showWarnings = FALSE)
 
-write(as.character(IDs),here(&quot;data/analysis/annotation/algae-IDs.txt&quot;))</code></pre>
+write(as.character(IDs),here(&quot;data/analysis/annotation/algae-IDs.txt&quot;))
+
+write_tsv(annot,path=here(&quot;data/analysis/annotation/blast2go_20190117_Taxonomy-resolved.txt&quot;))</code></pre>
 </div>
 <div id="conclusion" class="section level1">
 <h1><span class="header-section-number">6</span> Conclusion</h1>
