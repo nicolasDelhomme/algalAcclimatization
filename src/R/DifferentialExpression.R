@@ -117,6 +117,8 @@ dds <- dds[tx.sel,]
 vsd <- varianceStabilizingTransformation(dds,blind=FALSE,fitType='local')
 vst <- assay(vsd)
 vst <- vst - min(vst)
+write_tsv(as.data.frame(vst) %>% rownames_to_column(),
+          path=here("data/analysis/salmon/variance-stabilised_model-aware_gene-expression_data.tsv"))
 
 #' ## Gene of interest
 #' * 

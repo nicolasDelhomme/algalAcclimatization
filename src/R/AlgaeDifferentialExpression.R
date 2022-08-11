@@ -311,21 +311,21 @@ enr.list <- lapply(res.list,function(r){
 dev.null <- lapply(names(enr.list),function(n){
     r <- enr.list[[n]]
     if(!is.null(r$all$go)){
-        write_delim(r$all$go,path=file.path(file.path(here("data/analysis/DE",
+        write_tsv(r$all$go,path=file.path(file.path(here("data/analysis/DE",
                                                            paste0(n,"-all-DE-genes_GO-enrichment.txt")))))
-        write_delim(r$all$go[,c("id","padj")],path=file.path(file.path(here("data/analysis/DE",
+        write_tsv(r$all$go[,c("id","padj")],path=file.path(file.path(here("data/analysis/DE",
                                                                             paste0(n,"-all-DE-genes_GO-enrichment_for-REVIGO.txt")))))
     }
     if(!is.null(r$up$go)){
-        write_csv(r$up$go,path=file.path(file.path(here("data/analysis/DE",
+        write_tsv(r$up$go,path=file.path(file.path(here("data/analysis/DE",
                                                         paste0(n,"-up-DE-genes_GO-enrichment.txt")))))
-        write_delim(r$up$go[,c("id","padj")],path=file.path(file.path(here("data/analysis/DE",
+        write_tsv(r$up$go[,c("id","padj")],path=file.path(file.path(here("data/analysis/DE",
                                                                            paste0(n,"-up-DE-genes_GO-enrichment_for-REVIGO.txt")))))    
     }
     if(!is.null(r$dn$go)){
-        write_csv(r$dn$go,path=file.path(file.path(here("data/analysis/DE",
+        write_tsv(r$dn$go,path=file.path(file.path(here("data/analysis/DE",
                                                         paste0(n,"-down-DE-genes_GO-enrichment.txt")))))
-        write_delim(r$dn$go[,c("id","padj")],path=file.path(file.path(here("data/analysis/DE",
+        write_tsv(r$dn$go[,c("id","padj")],path=file.path(file.path(here("data/analysis/DE",
                                                                            paste0(n,"-down-DE-genes_GO-enrichment_for-REVIGO.txt")))))    
     }
 })
