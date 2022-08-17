@@ -16,6 +16,7 @@ suppressPackageStartupMessages({
   library(here)
   library(hyperSpec)
   library(magrittr)
+  library(matrixStats)
 })
 
 #' * Graphics
@@ -27,6 +28,32 @@ annotation <- read_tsv(here("data/b2g/blast2go_20190117_export.txt.gz"),show_col
 
 #' * Expression
 expression <- read_tsv(here("data/analysis/salmon/variance-stabilised_model-aware_gene-expression_data.tsv"))
+
+#' * Function
+"line_plot" <- function(samples=samples,vst=vst,genes=genes){
+
+  meds <- sapply(split.data.frame(scale(t(vst[genes,])),
+                                  factor(samples$Time,levels=c("std","60min",paste0(c(4,12,24,72,120),"hrs")))),
+                 colMedians)
+  
+  meanSd <- tibble(Means=colMeans(meds),Sd=colSds(meds),Timepoint=colnames(meds))
+  
+  p <- ggplot(meds %>% as_tibble() %>% mutate(geneID=genes) %>% 
+                pivot_longer(1:ncol(meds),names_to="Timepoint") %>% 
+                mutate(Timepoint=factor(Timepoint,levels=c("std","60min",paste0(c(4,12,24,72,120),"hrs")))),
+              aes(x=Timepoint,y=value,col=Timepoint))+
+    geom_violin() +
+    geom_line(data=meanSd,aes(x=Timepoint,y=Means,group=1),col="darkblue") + 
+    geom_line(data=meanSd,aes(x=Timepoint,y=Means+Sd,group=1),col="darkblue",linetype="dashed") + 
+    geom_line(data=meanSd,aes(x=Timepoint,y=Means-Sd,group=1),col="darkblue",linetype="dashed") + 
+    scale_y_continuous(name="VST expression") +
+    ggtitle(label=paste("Z-score values per time point"))
+  
+  p
+  suppressMessages(suppressWarnings(plot(p)))
+  return(NULL)
+}
+
 
 #' Reverse sample swap
 expression %<>% rename(B2_2_24hrs_D="B2_2_12hrs_D",B2_2_12hrs_D="B2_2_24hrs_D")
@@ -44,6 +71,9 @@ goi <- sub("\\.p\\d+$","",goi)
 stopifnot(length(goi)==length(unique(goi)))
 
 message(sprintf("There are %s candidates",length(goi)))
+
+#' * samples information
+samples <-read_tsv(here("doc/Samples-swap-corrected.tsv"),show_col_types = FALSE)
 
 #' ## Expression
 vst <- expression %>% filter(rowname %in% goi) %>% column_to_rownames() %>% as.matrix()
@@ -93,7 +123,7 @@ hm <- heatmap.2(t(scale(t(vst[sel,]))),
 #' transcripts in that cluster
 rownames(vst[sel,])
 
-#' Second cluster
+#' Second cluster (24, 72, 124)
 sel <- pos == 2
 
 hm <- heatmap.2(t(scale(t(vst[sel,]))),
@@ -104,7 +134,13 @@ hm <- heatmap.2(t(scale(t(vst[sel,]))),
                 labCol = sub("B2_2_","",colnames(vst)),
                 col=hpal)
 
-#' fourth cluster
+dir.create(here("data/analysis/cell-wall"),showWarnings=FALSE)
+write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-24h-172h-annotation.txt"))
+
+line_plot(samples,vst,rownames(vst[sel,]))
+
+
+#' fourth cluster (4h)
 sel <- pos == 4 
 
 hm <- heatmap.2(t(scale(t(vst[sel,]))),
@@ -116,4 +152,14 @@ hm <- heatmap.2(t(scale(t(vst[sel,]))),
 rownames(vst[sel,])
 dir.create(here("data/analysis/cell-wall"),showWarnings=FALSE)
 write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-4h-annotation.txt"))
+line_plot(samples,vst,rownames(vst[sel,]))
 
+#' third cluster (std)
+sel <- pos == 3
+hm <- heatmap.2(t(scale(t(vst[sel,]))),
+                Colv=FALSE, dendrogram="row",
+                distfun=pearson.dist,
+                hclustfun=function(X){hclust(X,method="ward.D2")}, trace = "none",
+                labCol = sub("B2_2_","",colnames(vst)),
+                col=hpal,margins=c(5,10),cexRow=0.7)
+rownames(vst[sel,])
