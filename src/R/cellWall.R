@@ -54,6 +54,8 @@ expression <- read_tsv(here("data/analysis/salmon/variance-stabilised_model-awar
   return(NULL)
 }
 
+#' * Output
+dir.create(here("data/analysis/cell-wall"),showWarnings=FALSE)
 
 #' Reverse sample swap
 expression %<>% rename(B2_2_24hrs_D="B2_2_12hrs_D",B2_2_12hrs_D="B2_2_24hrs_D")
@@ -79,6 +81,8 @@ samples <-read_tsv(here("doc/Samples-swap-corrected.tsv"),show_col_types = FALSE
 vst <- expression %>% filter(rowname %in% goi) %>% column_to_rownames() %>% as.matrix()
 sel <- rowSums(vst) > 0
 vst <- vst[sel,]
+
+samples <- samples[match(colnames(vst),samples$SampleID),]
 
 #' ### Heatmap
 #' Clustered by rows and columns
@@ -121,7 +125,9 @@ hm <- heatmap.2(t(scale(t(vst[sel,]))),
                 col=hpal)
 
 #' transcripts in that cluster
-rownames(vst[sel,])
+write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-12-120h-annotation.txt"))
+line_plot(samples,vst,rownames(vst[sel,]))
+ggsave(file=here("data/analysis/cell-wall/cluster-12-120h-annotation.pdf"),width=12,height=8)
 
 #' Second cluster (24, 72, 124)
 sel <- pos == 2
@@ -134,11 +140,9 @@ hm <- heatmap.2(t(scale(t(vst[sel,]))),
                 labCol = sub("B2_2_","",colnames(vst)),
                 col=hpal)
 
-dir.create(here("data/analysis/cell-wall"),showWarnings=FALSE)
-write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-24h-172h-annotation.txt"))
-
+write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-24-120h-annotation.txt"))
 line_plot(samples,vst,rownames(vst[sel,]))
-
+ggsave(file=here("data/analysis/cell-wall/cluster-24-120h-annotation.pdf"),width=12,height=8)
 
 #' fourth cluster (4h)
 sel <- pos == 4 
@@ -149,10 +153,10 @@ hm <- heatmap.2(t(scale(t(vst[sel,]))),
                 hclustfun=function(X){hclust(X,method="ward.D2")}, trace = "none",
                 labCol = sub("B2_2_","",colnames(vst)),
                 col=hpal,margins=c(5,10),cexRow=0.7)
-rownames(vst[sel,])
-dir.create(here("data/analysis/cell-wall"),showWarnings=FALSE)
+
 write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-4h-annotation.txt"))
 line_plot(samples,vst,rownames(vst[sel,]))
+ggsave(file=here("data/analysis/cell-wall/cluster-4h-annotation.pdf"),width=12,height=8)
 
 #' third cluster (std)
 sel <- pos == 3
@@ -162,4 +166,15 @@ hm <- heatmap.2(t(scale(t(vst[sel,]))),
                 hclustfun=function(X){hclust(X,method="ward.D2")}, trace = "none",
                 labCol = sub("B2_2_","",colnames(vst)),
                 col=hpal,margins=c(5,10),cexRow=0.7)
-rownames(vst[sel,])
+
+write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-std-annotation.txt"))
+line_plot(samples,vst,rownames(vst[sel,]))
+ggsave(file=here("data/analysis/cell-wall/cluster-std-annotation.pdf"),width=12,height=8)
+
+#' fifth cluster - aspecific, uninteresting
+#'
+#' # Session Info
+#' ```{r session info, echo=FALSE}
+#' sessionInfo()
+#' ```
+
