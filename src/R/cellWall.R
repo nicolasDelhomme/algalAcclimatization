@@ -117,3 +117,5 @@ rownames(vst[sel,])
 dir.create(here("data/analysis/cell-wall"),showWarnings=FALSE)
 write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst[sel,])),file=here("data/analysis/cell-wall/cluster-4h-annotation.txt"))
 
+
+
