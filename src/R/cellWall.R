@@ -26,6 +26,14 @@ hpal <- colorRampPalette(c("blue","white","red"))(100)
 annotation <- read_tsv(here("data/b2g/blast2go_20190117_export.txt.gz"),show_col_types=FALSE) %>% 
   mutate(`Sequence Name`=sub("\\.p\\d+$","",`Sequence Name`))
 
+#' * GO dictionary
+go_annot <- annotation %>% select(`Annotation GO ID`,`Annotation GO Term`,`Annotation GO Category`) %>% 
+  rename(ID=`Annotation GO ID`,Term=`Annotation GO Term`,Category=`Annotation GO Category`) %>% 
+  filter(!is.na(ID)) 
+
+go_annot <- tibble(ID=unlist(str_split(go_annot$ID,"\\|"),use.names=FALSE),
+                   Term=unlist(str_split(go_annot$Term,"\\|"),use.names=FALSE),
+                   Category=unlist(str_split(go_annot$Category,"\\|"),use.names=FALSE)) %>% distinct()
 #' * Expression
 expression <- read_tsv(here("data/analysis/salmon/variance-stabilised_model-aware_gene-expression_data.tsv"))
 
@@ -173,6 +181,36 @@ ggsave(file=here("data/analysis/cell-wall/cluster-std-annotation.pdf"),width=12,
 
 #' fifth cluster - aspecific, uninteresting
 #'
+#' # GO terms
+#' Extract the go IDs from the annotation, associate them with the genes in the different clusters,
+#' before summarising their occurences
+goFreq <- 
+  tibble(ID=names(pos),Cluster=factor(pos)) %>% left_join(
+    annotation %>% 
+      select(`Annotation GO ID`,`Sequence Name`) %>% 
+      rename(ID=`Sequence Name`,
+             GO_ID=`Annotation GO ID`) %>% 
+      separate_rows(GO_ID,sep="\\|"),by="ID") %>% 
+  group_by(Cluster,GO_ID) %>% dplyr::count()
+
+#' convert to a matrix
+mat <- goFreq %>% pivot_wider(names_from=Cluster,values_from=n) %>% column_to_rownames("GO_ID") %>% as.matrix()
+
+#' Impute NAs to be 0
+mat[is.na(mat)] <- 0
+
+#' Plot the matrix for rows that have more than 5 occurrences
+pdf(here("data/analysis/cell-wall/GO-terms-occurence-heatmap.pdf"),width=8,height=12)
+heatmap.2(mat[rowSums(mat)>5,],trace="none",
+          Colv=FALSE, dendrogram="row",cexRow=0.3,
+          col=RColorBrewer::brewer.pal(9,"Reds"))
+dev.off()
+
+#' Extract the annotation for a GO_ID
+#' 
+#' _e.g._ GO:0005618
+go_annot %>% filter(ID=="GO:0005618") %>% select(Term,Category)
+
 #' # Session Info
 #' ```{r session info, echo=FALSE}
 #' sessionInfo()
