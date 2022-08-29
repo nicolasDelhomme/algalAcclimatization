@@ -35,7 +35,8 @@ go_annot <- tibble(ID=unlist(str_split(go_annot$ID,"\\|"),use.names=FALSE),
                    Term=unlist(str_split(go_annot$Term,"\\|"),use.names=FALSE),
                    Category=unlist(str_split(go_annot$Category,"\\|"),use.names=FALSE)) %>% distinct()
 #' * Expression
-expression <- read_tsv(here("data/analysis/salmon/variance-stabilised_model-aware_gene-expression_data.tsv"))
+expression <- read_tsv(here("data/analysis/salmon/variance-stabilised_model-aware_gene-expression_data.tsv"),
+                       show_col_types=FALSE)
 
 #' * Function
 "line_plot" <- function(samples=samples,vst=vst,genes=genes){
@@ -91,6 +92,10 @@ sel <- rowSums(vst) > 0
 vst <- vst[sel,]
 
 samples <- samples[match(colnames(vst),samples$SampleID),]
+
+#' * Export
+write_tsv(vst %>% as_tibble() %>% rownames_to_column("ID"),
+          here("data/analysis/cell-wall/goi-vst-expression.tsv"))
 
 #' ### Heatmap
 #' Clustered by rows and columns
