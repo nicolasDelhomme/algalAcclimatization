@@ -83,18 +83,20 @@ timepoint="std"
 
 #' We associate the expression data with the enzyme code we identified in the annotation
 #' that exists in the selected pathway. We filter for those that are expressed
-ko_expression = left_join(
+expression <- left_join(
   left_join(lignin, ec_ko_map,by=c("EC")),
   expression %>% filter(rowname %in% goi_lignin) %>% 
     select("rowname",contains(timepoint)) %>% rowwise() %>% 
-    summarise(ID=rowname,m=median(c_across(contains(timepoint)))) %>% 
-    filter(m>0),
-  by=c("ID")) %>% filter(!is.na(m)) %>% 
-  select(KO,m) %>% group_by(KO) %>% 
-  summarise(exp=sum(m))
+    summarise(ID=rowname,EXP=median(c_across(contains(timepoint)))) %>% 
+    filter(EXP>0),
+  by=c("ID")) %>% filter(!is.na(EXP)) 
+
+ko_expression <- expression %>% 
+  select(KO,EXP) %>% group_by(KO) %>% 
+  summarise(EXP=sum(EXP))
 
 #' We transform the expression data to the required input format
-gene.data <- unlist(ko_expression$exp)
+gene.data <- unlist(ko_expression$EXP)
 names(gene.data) <- unlist(ko_expression$KO)
 
 #' We visualise the pathway. Here I use the `ko` species and 
@@ -102,7 +104,7 @@ names(gene.data) <- unlist(ko_expression$KO)
 #' 
 #' The figure will be saved under the pathway name and the extension `.pathview.png`
 #' and saved in the `data/analysis/cell-wall` folder.
-pathview(gene.data=gene.data,pathway.id="00940",
+pathview(gene.data=gene.data,pathway.id="00940",gene.idtype="KEGG",
          species="ko",kegg.dir=here("data/analysis/cell-wall"))
 
 #' # Session Info
