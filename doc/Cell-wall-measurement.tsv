@@ -1,0 +1,17 @@
+width_in_um	time_in_hours	treatment
+0.08	1	control
+0.087	1	cold
+0.088	4	control
+0.09	4	cold
+0.089	12	control
+0.09	12	cold
+0.099	24	control
+0.108	24	cold
+0.086	48	control
+0.113	48	cold
+0.091	72	control
+0.119	72	cold
+0.108	120	control
+0.132	120	cold
+0.117	240	control
+0.156	240	cold
