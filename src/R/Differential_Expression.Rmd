@@ -39,23 +39,99 @@ We start by reading the DE genes and prepare a binary matrix for overlapping gen
 #read the DE files
 files <- list.files(here("data/analysis/DE"), pattern = "genes\\.csv$", full.names = TRUE)
 
-#list of dataframes
-df_list <- lapply(files, function(file) {
-  data <- read.csv(file)
-  gene_names <- data[,1]
-  df <- data.frame(gene = gene_names, comparison = 1)
-  colnames(df) <- c("gene", gsub(".*Time-(.*)genes\\.csv", "\\1", file))
-  return(df)
-})
-names(df_list) <- gsub(".*Time-(.*)genes\\.csv", "\\1", files)
+#function to calculate the frequency matrix for upset plot
+fun.mat <- function(condition){
+  #list of dataframes
+  df_list <- lapply(files, function(file) {
+    data <- read.csv(file)
+    if (!is.null(condition)) {
+      rows <- eval(parse(text = condition), envir = data)
+      gene_names <- data[rows, 1]
+    } else {
+      gene_names <- data[,1]
+    }
+    df <- data.frame(gene = gene_names, comparison = 1)
+    colnames(df) <- c("gene", gsub(".*Time-(.*)genes\\.csv", "\\1", file))
+    return(df)
+  })
+  names(df_list) <- gsub(".*Time-(.*)genes\\.csv", "\\1", files)
+  
+  mat <- reduce(df_list, full_join, by = "gene")
+  mat[is.na(mat)] <- 0
+  return(mat)
+}
 
-mat <- reduce(df_list, full_join, by = "gene")
-mat[is.na(mat)] <- 0
+
+# function to plot the volcano plot
+fun.volcano <- function(comparison, padj=0.001){
+  file <- grep(pattern = comparison, files, value = TRUE)
+  data <- read.csv(file)
+  data$significance <- ifelse(data$padj < padj & abs(data$log2FoldChange) >= 1,
+                              ifelse(data$log2FoldChange >= 1, "up", "down"),
+                              "not significant")
+  x_down <- min(data$log2FoldChange) %>% round()
+  x_up <- max(data$log2FoldChange) %>% round()
+  y <- -log10(min(data$padj)) %>% round()
+  
+  # Create a data frame for the text labels
+  text_data <- data.frame(
+    x = c(x_down, x_up, 0),
+    y = c(y, y, y),
+    label = c(paste(sum(data$significance == "down"), "\n genes"),
+              paste(sum(data$significance == "up"), "\n genes"),
+              paste("padj <", padj))
+  )
+  ggplot(data, aes(x = log2FoldChange, y = -log10(padj))) +
+    geom_point(aes(color = significance), alpha = 0.5) +
+    scale_color_manual(values = c("up" = "red", "down" = "blue", "not significant" = "grey")) +
+    geom_vline(xintercept = c(-1, 1), linetype = "dashed", color = "grey") +
+    geom_hline(yintercept = -log10(0.001), linetype = "dashed", color = "grey") +
+    geom_text(data = text_data, aes(x = x, y = y, label = label)) +
+    xlab("Log2 Fold Change") +
+    ylab("-Log10 Adjusted P-value")
+}
+
 ```
+# Volcano plots
+
+#### {.tabset .unlisted .unnumbered .tabset-pills}
+
+##### 1h-vs-std {-}
+```{r volcano 1h-vs-std}
+fun.volcano(comparison = "1h-vs-std")
+```
+
+##### 4h-vs-1h {-}
+```{r volcano 4h-vs-1h}
+fun.volcano(comparison = "4h-vs-1h")
+```
+
+##### 12h-vs-4h {-}
+```{r volcano 12h-vs-4h}
+fun.volcano(comparison = "12h-vs-4h")
+```
+
+##### 24h-vs-12 {-}
+```{r volcano 24h-vs-12}
+fun.volcano(comparison = "24h-vs-12")
+```
+
+##### 72h-vs-24h {-}
+```{r volcano 72h-vs-24h}
+fun.volcano(comparison = "72h-vs-24h")
+```
+
+##### 120h-vs-72h {-}
+```{r volcano 120h-vs-72h}
+fun.volcano(comparison = "120h-vs-72h")
+```
+
 
 # intersections (upset plot)
 First we look at all intersections
 ```{r upset all}
+mat <- fun.mat(condition = NULL)
+
 upset(mat, 
       sets = c("72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"),
       keep.order = TRUE, 
@@ -70,16 +146,43 @@ upset(mat, keep.order = TRUE, order.by = "freq", sets = c("120h-vs-72h", "72h-vs
 
 We might want to drop the comparisons between 120h and 72h, order the intersections by frequency and limit their numbers to the top 20 ones. 
 ```{r upset most}
-upset(mat, 
-      order.by = "freq", 
-      sets = c("72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"),
-      keep.order = TRUE, 
-      mainbar.y.label = "number of overalpping genes", 
-      sets.x.label = "Number of DE genes", 
-      point.size = 7, 
-      shade.color = "grey50", 
-      nintersects = 20, 
-      text.scale = c(1.8,1.4,1.5,1.4,1.5,1.3))
+fun.upset <- function(mat = mat, col="black") {
+  upset(mat, 
+        order.by = c("freq","degree"), 
+        sets = c("72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"),
+        keep.order = TRUE, 
+        mainbar.y.label = "number of overalpping genes", 
+        sets.x.label = "Number of DE genes", 
+        point.size = 7, 
+        shade.color = "grey50", 
+        main.bar.color = col,
+        nintersects = 20, 
+        text.scale = c(1.8,1.4,1.5,1.4,1.5,1.3))
+}
+
+fun.upset(mat = mat)
+```
+
+Below we look at these selected comparisons but separately for up and down regulated genes.  
+For easier evaluations, we first order the bars by frequency and then by degree. This means that we will have first the bars for individual comparisons (ordered by frequency) 
+and then overlapping of two comparisons followed by the group of three comparisons. 
+
+## Up regulated genes
+```{r upset up}
+mat_up <- fun.mat(condition = "data$log2FoldChange >= 1")
+fun.upset(mat = mat_up, col = "red")
+
+```
+
+
+## down regulated genes
+```{r upset down}
+mat_dn <- fun.mat(condition = "data$log2FoldChange <= 1")
+fun.upset(mat = mat_dn, col = "blue")
 ```
 
 Next it would be interesting to see the relationship to the cell wall related genes 
+```{r upset cell wall}
+cw <- read_tsv(here("data/analysis/cell-wall/goi-vst-expression_with-geneID.tsv"))
+```
+
