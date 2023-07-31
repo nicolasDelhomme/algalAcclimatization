@@ -50,6 +50,8 @@ taxonomy/
 taxonomy
 NCBI
 NCBI/
+analysis
+analysis/
 
 # VennDiagram
 VennDiagram*.log
