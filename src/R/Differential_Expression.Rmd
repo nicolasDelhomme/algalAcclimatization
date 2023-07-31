@@ -1,0 +1,85 @@
+ ---
+ title: "Algae time series Expression and Cell Wall thickness correlation"
+ subtitle: "projectID: u2019005"
+ author: "Aman Zare & Nicolas Delhomme"
+ date: "`r Sys.Date()`"
+ output: 
+  html_document:
+   fig_width: 9
+   fig_height: 6
+   toc: TRUE
+   number_sections: TRUE
+   toc_depth: 3
+   toc_float:
+    collapsed: TRUE
+    smooth_scroll: TRUE
+   code_folding: hide
+   theme: "flatly" 
+   highlight: pygments
+   includes:
+    before_body: header.html
+    after_body: footer.html
+   css: style.css    
+ ---
+
+# Setup 
+```{r set up}
+suppressPackageStartupMessages({
+  library(here)
+  library(ggplot2)
+  library(purrr)
+  library(tidyverse)
+  library(UpSetR)
+})
+```
+
+# Data preparation
+We start by reading the DE genes and prepare a binary matrix for overlapping genes in various comparisons.
+```{r data}
+#read the DE files
+files <- list.files(here("data/analysis/DE"), pattern = "genes\\.csv$", full.names = TRUE)
+
+#list of dataframes
+df_list <- lapply(files, function(file) {
+  data <- read.csv(file)
+  gene_names <- data[,1]
+  df <- data.frame(gene = gene_names, comparison = 1)
+  colnames(df) <- c("gene", gsub(".*Time-(.*)genes\\.csv", "\\1", file))
+  return(df)
+})
+names(df_list) <- gsub(".*Time-(.*)genes\\.csv", "\\1", files)
+
+mat <- reduce(df_list, full_join, by = "gene")
+mat[is.na(mat)] <- 0
+```
+
+# intersections (upset plot)
+First we look at all intersections
+```{r upset all}
+upset(mat, 
+      sets = c("72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"),
+      keep.order = TRUE, 
+      mainbar.y.label = "number of overalpping genes", 
+      sets.x.label = "Number of DE genes", 
+      point.size = 7, 
+      shade.color = "grey50", 
+      text.scale = c(1.8,1.4,1.5,1.4,1.5,1.3))
+
+upset(mat, keep.order = TRUE, order.by = "freq", sets = c("120h-vs-72h", "72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"))
+```
+
+We might want to drop the comparisons between 120h and 72h, order the intersections by frequency and limit their numbers to the top 20 ones. 
+```{r upset most}
+upset(mat, 
+      order.by = "freq", 
+      sets = c("72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"),
+      keep.order = TRUE, 
+      mainbar.y.label = "number of overalpping genes", 
+      sets.x.label = "Number of DE genes", 
+      point.size = 7, 
+      shade.color = "grey50", 
+      nintersects = 20, 
+      text.scale = c(1.8,1.4,1.5,1.4,1.5,1.3))
+```
+
+Next it would be interesting to see the relationship to the cell wall related genes 
