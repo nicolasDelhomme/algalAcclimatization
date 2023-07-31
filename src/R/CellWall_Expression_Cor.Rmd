@@ -1,35 +1,45 @@
- ---
- title: "Algae time series Expression and Cell Wall thickness correlation"
- subtitle: "projectID: u2019005"
- author: "Aman Zare & Nicolas Delhomme"
- date: "`r Sys.Date()`"
- output: 
+---
+title: "Algae time series Expression and Cell Wall thickness correlation"
+subtitle: "projectID: u2019005"
+author: "Aman Zare & Nicolas Delhomme"
+date: "`r Sys.Date()`"
+output: 
   html_document:
-   fig_width: 9
-   fig_height: 6
-   toc: TRUE
-   number_sections: TRUE
-   toc_depth: 3
-   toc_float:
-    collapsed: TRUE
-    smooth_scroll: TRUE
-   code_folding: hide
-   theme: "flatly" 
-   highlight: pygments
-   includes:
-    before_body: header.html
-    after_body: footer.html
-   css: style.css    
- ---
- 
+    fig_width: 9
+    fig_height: 6
+    toc: TRUE
+    number_sections: TRUE
+    toc_depth: 3
+    toc_float:
+      collapsed: TRUE
+      smooth_scroll: TRUE
+    code_folding: hide
+    theme: "flatly" 
+    highlight: pygments
+    includes:
+      before_body: header.html
+      after_body: footer.html
+    css: style.css    
+---
+
+# Setup 
 ```{r set up}
 suppressPackageStartupMessages({
   library(here)
+  library(hyperSpec)
+  library(gplots)
+  library(ggplot2)
+  library(magrittr)
   library(tidyverse)
 })
+
+#silence chunks
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
 ```
 
-We use a combination of the Sequence Description and Gene Ontology (GO) term to fetch cell wall related gene candidates
+# Data preparation
+We use a combination of the Sequence Description and Gene Ontology (GO) terms to fetch cell-wall-related gene candidates
 ```{r cell wall genes}
 # Annotation
 annotation <- read_tsv(here("data/b2g/blast2go_20190117_export.txt.gz"),show_col_types=FALSE) %>% 
@@ -51,7 +61,7 @@ expression %<>% rename(B2_2_24hrs_D="B2_2_12hrs_D",B2_2_12hrs_D="B2_2_24hrs_D")
 
 # Gene of interest
 goi <- unlist(annotation[grepl("cell wall",annotation$`Sequence Description`) | 
-  grepl("cell wall",annotation$`Annotation GO Term`),"Sequence Name"],use.names=FALSE)
+                           grepl("cell wall",annotation$`Annotation GO Term`),"Sequence Name"],use.names=FALSE)
 
 #' replace (\\.p\\d+$) .p followed by any number of digits. The $ the sign that indicates the end of the text
 goi <- sub("\\.p\\d+$","",goi)
@@ -71,15 +81,24 @@ vst <- vst[sel,]
 
 samples <- samples[match(colnames(vst),samples$SampleID),]
 
-#' * Export
-write_tsv(vst %>% as_tibble() %>% rownames_to_column("ID"),
-          here("data/analysis/cell-wall/goi-vst-expression_with-geneID.tsv"))
+# Export
+# write_tsv(vst %>% as_tibble() %>% rownames_to_column("ID"),
+#           here("data/analysis/cell-wall/goi-vst-expression_with-geneID.tsv"))
 ```
+
+# Correlation
+
+## calculation
+Next, we look at the correlation between cell wall thickness and change in expression (mean of 4 replicates). We keep only the time points that are present in both datasets:  
+
+`1h`, `4hs`, `12hs`, `24hs`, `72hs`, `120hs` 
 
 ```{r preparing matrices for cor}
 #cell wall
 cw <- read_tsv(here("doc/Cell-wall-measurement.tsv"))
-cw %<>% filter(treatment %in% "control", !time_in_hours %in% c(48,240))
+cw %<>% filter(!time_in_hours %in% c(48,240))
+cw_ctrl <- cw %>% filter(treatment %in% "control")
+cw_cold <- cw %>% filter(treatment %in% "cold")
 
 colnames(vst) %<>% gsub(pattern = "B2_2_", replacement = "")
 colnames(vst) %<>%  gsub(pattern = "60min", replacement = "1hrs_")
@@ -88,31 +107,113 @@ vst$gene <- rownames(vst)
 
 #calculating the average expression of reps
 vst_avg <- vst %>% pivot_longer(cols = -gene, names_to = c("time", "rep"), names_sep = "_") %>%
-   group_by(time, gene) %>% 
-   summarize(meanExp = mean(value)) %>% 
-   pivot_wider(names_from = time, values_from = meanExp)
+  group_by(time, gene) %>% 
+  summarize(meanExp = mean(value)) %>% 
+  pivot_wider(names_from = time, values_from = meanExp)
 
 #reorder the columns based on the cw data
-vst_avg <- vst_avg[, c(1, match(paste0(cw$time_in_hours, "hrs"), colnames(vst_avg)))]
+vst_avg <- vst_avg[, c(1, match(paste0(cw_ctrl$time_in_hours, "hrs"), colnames(vst_avg)))]
 
 #correlation
 vst_avg %<>% 
-   rowwise() %>% 
-   mutate(width_Cor = cor(c_across(`1hrs`:`120hrs`),
-                          cw$width_in_um %>% as.vector(),
-                          method = "pearson"))
-
-vst_avg$width_Cor %>% hist()
+  rowwise() %>% 
+  mutate(ctrl_cor = cor(c_across(`1hrs`:`120hrs`),
+                        cw_ctrl$width_in_um %>% as.vector(),
+                        method = "pearson"),
+         cold_cor = cor(c_across(`1hrs`:`120hrs`),
+                        cw_cold$width_in_um %>% as.vector(),
+                        method = "pearson"))
 
 ```
 
+
+## plotting
+Below we look at the distribution of the correlation values for cell wall genes. 
 ```{r cor plots}
-hist(vst_avg$width_Cor)
-heatmap.2(t(scale(t(vst_avg[,-1]))),
-          distfun=pearson.dist,
-          hclustfun=function(X){hclust(X,method="ward.D2")},
-          labRow = NA,trace = "none",
-          col=hpal, Colv = FALSE, dendrogram = "row")
-vst_avg %>% ggplot(aes(x = "Correlation values", y = width_Cor)) + geom_violin() + geom_jitter()
+# Reshape data for ggplot
+df <- vst_avg %>% 
+  select(ctrl_cor,cold_cor) %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(Color = ifelse(value >= 0.7, "red",
+                        ifelse(value <= -0.7, "blue", "gray")))
+# Create the plot
+ggplot(data = df, aes(x = name, y = value)) +
+  geom_violin() +
+  geom_jitter(aes(color = Color), width = 0.2) +
+  scale_color_manual(values = c("blue", "grey", "red")) +
+  theme(legend.position = "none", text = element_text(size = 13)) +
+  labs(x = "", y = "Correlation values") + 
+  geom_hline(yintercept = 0.7, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = -0.7, linetype = "dashed", color = "blue")
+
+
+#frequencies
+df %<>% 
+  mutate(
+    range = factor(case_when(
+      (value >= -1 & value < -0.9) ~ "-1",
+      (value >= -0.9 & value < -0.8) ~ "-0.9",
+      (value >= -0.8 & value < -0.7) ~ "-0.8",
+      (value >= -0.7 & value < -0.6) ~ "-0.7",
+      (value >= -0.6 & value < -0.5) ~ "-0.6",
+      (value >= -0.5 & value < -0.4) ~ "-0.5",
+      (value >= -0.4 & value < -0.3) ~ "-0.4",
+      (value >= -0.3 & value < -0.2) ~ "-0.3",
+      (value >= -0.2 & value < -0.1) ~ "-0.2",
+      (value >= -0.1 & value < 0) ~ "-0.1",
+      (value >= 0 & value < 0.1) ~ "0.1",
+      (value >= 0.1 & value < 0.2) ~ "0.2",
+      (value >= 0.2 & value < 0.3) ~ "0.3",
+      (value >= 0.3 & value < 0.4) ~ "0.4",
+      (value >= 0.4 & value < 0.5) ~ "0.5",
+      (value >= 0.5 & value < 0.6) ~ "0.6",
+      (value >= 0.6 & value < 0.7) ~ "0.7",
+      (value >= 0.7 & value < 0.8) ~ "0.8",
+      (value >= 0.8 & value < 0.9) ~ "0.9",
+      (value >= 0.9 & value <= 1) ~ "1",
+      TRUE ~ NA_character_), 
+      levels = c( "-1", "-0.9", "-0.8", "-0.7", "-0.6", "-0.5", "-0.4", "-0.3", "-0.2", "-0.1",
+                  "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1"))) %>% 
+  group_by(range, name) %>%
+  summarise(freq = n()) %>%
+  ungroup() %>% 
+  mutate(barcol = case_when(name == "ctrl_cor" ~ "forestgreen", 
+                            name == "cold_cor" ~"deepskyblue"))
+df %>% 
+  ggplot(aes(y = ifelse(test = name == "cold_cor", yes = -freq, no = freq), 
+             x = range, fill = name)) +
+  geom_col() +
+  scale_y_continuous() + 
+  scale_fill_manual(values = unique(df$barcol)) + 
+  labs(x = "Correlation", y = "Number of genes") + 
+  theme(text = element_text(size = 12))
 ```
 
+## mfuzz clusters
+Next, we identify the mfuzz clusters associated with our highly correlated genes. 
+```{r find relative mfuzz}
+#genes highly correlated with widths change in cold and control
+goi_cold <- vst_avg %>% filter(cold_cor >= 0.7 | cold_cor <= -0.7) %>% .$gene
+goi_ctrl <- vst_avg %>% filter(ctrl_cor >= 0.7 | ctrl_cor <= -0.7) %>% .$gene
+
+#highly correlated genes that are only in cold (and not in control)
+goi_cold_only <- goi_cold[!goi_cold %in% goi_ctrl]
+
+#mfuzz clusters
+clusts <- read_csv(here("data/mfuzz/clustermembership.csv"))
+clusts <- clusts[,-1]
+
+print("Top: mfuzz clusters /n Bottom: Number of highly correlated genes (cold only) with cell wall growth in that mfuzz cluster")
+clusts %>% filter(NAME %in% goi_cold_only) %>% .$CLUSTER %>% table()
+
+
+```
+
+# Session Info
+<details><summary>Session Info</summary>
+```{r session info}
+sessionInfo()
+```
+</details>
+
+&nbsp;
