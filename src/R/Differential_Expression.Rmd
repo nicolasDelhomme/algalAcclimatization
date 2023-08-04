@@ -1,29 +1,30 @@
- ---
- title: "Algae time series Expression and Cell Wall thickness correlation"
- subtitle: "projectID: u2019005"
- author: "Aman Zare & Nicolas Delhomme"
- date: "`r Sys.Date()`"
- output: 
+---
+title: "Algae time series Differential Expression analysis"
+subtitle: "projectID: u2019005"
+author: "Aman Zare & Nicolas Delhomme"
+date: "`r Sys.Date()`"
+output: 
   html_document:
-   fig_width: 9
-   fig_height: 6
-   toc: TRUE
-   number_sections: TRUE
-   toc_depth: 3
-   toc_float:
-    collapsed: TRUE
-    smooth_scroll: TRUE
-   code_folding: hide
-   theme: "flatly" 
-   highlight: pygments
-   includes:
-    before_body: header.html
-    after_body: footer.html
-   css: style.css    
- ---
+    fig_width: 9
+    fig_height: 6
+    toc: TRUE
+    number_sections: TRUE
+    toc_depth: 3
+    toc_float:
+      collapsed: TRUE
+      smooth_scroll: TRUE
+    code_folding: hide
+    theme: "flatly" 
+    highlight: pygments
+    includes:
+      before_body: header.html
+      after_body: footer.html
+    css: style.css    
+---
 
 # Setup 
-```{r set up}
+```{r set up, message=FALSE, warning=FALSE}
+#libraries 
 suppressPackageStartupMessages({
   library(here)
   library(ggplot2)
@@ -31,36 +32,25 @@ suppressPackageStartupMessages({
   library(tidyverse)
   library(UpSetR)
 })
-```
 
-# Data preparation
-We start by reading the DE genes and prepare a binary matrix for overlapping genes in various comparisons.
-```{r data}
-#read the DE files
+#global objects used later in functions
+#DE files
 files <- list.files(here("data/analysis/DE"), pattern = "genes\\.csv$", full.names = TRUE)
 
-#function to calculate the frequency matrix for upset plot
-fun.mat <- function(condition){
-  #list of dataframes
-  df_list <- lapply(files, function(file) {
-    data <- read.csv(file)
-    if (!is.null(condition)) {
-      rows <- eval(parse(text = condition), envir = data)
-      gene_names <- data[rows, 1]
-    } else {
-      gene_names <- data[,1]
-    }
-    df <- data.frame(gene = gene_names, comparison = 1)
-    colnames(df) <- c("gene", gsub(".*Time-(.*)genes\\.csv", "\\1", file))
-    return(df)
-  })
-  names(df_list) <- gsub(".*Time-(.*)genes\\.csv", "\\1", files)
-  
-  mat <- reduce(df_list, full_join, by = "gene")
-  mat[is.na(mat)] <- 0
-  return(mat)
-}
+#cell wall genes
+cw <- read_tsv(here("data/analysis/cell-wall/goi-vst-expression_with-geneID.tsv"))
 
+#sets (comparisons)
+sets <- c("120h-vs-72h", "72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std")
+```
+
+# Preparations
+Blow are the functions used for data preparations and plotting.   
+
+  - For Volcano plots we use `padj < 0.001` and `abs(log2FoldChange) >=1` as the significance level.  
+  - For Upset plots we start by reading the DE genes and prepare a binary matrix for overlapping genes in various comparisons.
+```{r data}
+#functions
 
 # function to plot the volcano plot
 fun.volcano <- function(comparison, padj=0.001){
@@ -91,6 +81,55 @@ fun.volcano <- function(comparison, padj=0.001){
     ylab("-Log10 Adjusted P-value")
 }
 
+#function to calculate the frequency matrix for upset plot
+fun.mat <- function(condition){
+  #list of dataframes
+  df_list <- lapply(files, function(file) {
+    data <- read.csv(file)
+    if (!is.null(condition)) {
+      rows <- eval(parse(text = condition), envir = data)
+      gene_names <- data[rows, 1]
+    } else {
+      gene_names <- data[,1]
+    }
+    df <- data.frame(ID = gene_names, comparison = 1)
+    colnames(df) <- c("ID", gsub(".*Time-(.*)genes\\.csv", "\\1", file))
+    return(df)
+  })
+  names(df_list) <- gsub(".*Time-(.*)genes\\.csv", "\\1", files)
+  
+  mat <- reduce(df_list, full_join, by = "ID")
+  mat[is.na(mat)] <- 0
+  return(mat)
+}
+
+#upset plot function
+fun.upset <- function(mat = mat, col="black", meta = FALSE) {
+  if(!isTRUE(meta)){
+    metadata <- NULL
+  } else {
+    cw_genes <- sapply(sets , function(x) {
+      file <- grep(pattern = x, files, value = TRUE)
+      genes <- read.csv(file) %>% .$X
+      cw_genes <- intersect(cw$ID, intersect(genes, mat$ID))
+      length(cw_genes)
+    })
+    metadata.cw <- data.frame(sets = sets, cw_genes = cw_genes)
+    metadata <- list(data = metadata.cw, plots = list(list(type = "hist", column = "cw_genes", assign = 20, fontsize = 10)))
+  }
+  upset(mat, 
+        order.by = c("freq","degree"), 
+        sets = sets[-1],
+        keep.order = TRUE, 
+        mainbar.y.label = "Number of DE genes (exclusive)", 
+        sets.x.label = "Number of DE genes", 
+        point.size = 7, 
+        shade.color = "grey50", 
+        main.bar.color = col,
+        nintersects = 20, 
+        text.scale = c(1.8,1.4,1.5,1.4,1.5,1.3),
+        set.metadata = metadata) 
+}
 ```
 # Volcano plots
 
@@ -127,62 +166,71 @@ fun.volcano(comparison = "120h-vs-72h")
 ```
 
 
-# intersections (upset plot)
+# intersections (upset plots)
 First we look at all intersections
 ```{r upset all}
 mat <- fun.mat(condition = NULL)
 
 upset(mat, 
-      sets = c("72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"),
+      sets = sets,
       keep.order = TRUE, 
-      mainbar.y.label = "number of overalpping genes", 
+      mainbar.y.label = "Number of DE genes (exclusive)", 
       sets.x.label = "Number of DE genes", 
-      point.size = 7, 
       shade.color = "grey50", 
       text.scale = c(1.8,1.4,1.5,1.4,1.5,1.3))
-
-upset(mat, keep.order = TRUE, order.by = "freq", sets = c("120h-vs-72h", "72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"))
 ```
 
-We might want to drop the comparisons between 120h and 72h, order the intersections by frequency and limit their numbers to the top 20 ones. 
-```{r upset most}
-fun.upset <- function(mat = mat, col="black") {
-  upset(mat, 
-        order.by = c("freq","degree"), 
-        sets = c("72h-vs-24h", "24h-vs-12h", "12h-vs-4h", "4h-vs-1h", "1h-vs-std"),
-        keep.order = TRUE, 
-        mainbar.y.label = "number of overalpping genes", 
-        sets.x.label = "Number of DE genes", 
-        point.size = 7, 
-        shade.color = "grey50", 
-        main.bar.color = col,
-        nintersects = 20, 
-        text.scale = c(1.8,1.4,1.5,1.4,1.5,1.3))
-}
+We might want to drop the comparisons between 120h and 72h, order the intersections and limit their numbers to the top 20 ones.
 
+`r emoji::emoji("warning")`For easier evaluations, we first order the bars by frequency and then by degree. This means that we will have first the bars for individual comparisons (ordered by frequency) and then overlapping of two comparisons followed by the group of three comparisons.  
+
+Below, we examine these selected comparisons for up-regulated and down-regulated genes, both collectively and separately. 
+
+#### {.tabset .unlisted .unnumbered .tabset-pills}
+
+##### All genes {-}
+```{r upset most}
 fun.upset(mat = mat)
 ```
 
-Below we look at these selected comparisons but separately for up and down regulated genes.  
-For easier evaluations, we first order the bars by frequency and then by degree. This means that we will have first the bars for individual comparisons (ordered by frequency) 
-and then overlapping of two comparisons followed by the group of three comparisons. 
-
-## Up regulated genes
+##### Up regulated genes {-}
 ```{r upset up}
 mat_up <- fun.mat(condition = "data$log2FoldChange >= 1")
 fun.upset(mat = mat_up, col = "red")
 
 ```
 
-
-## down regulated genes
+##### Down regulated genes {-}
 ```{r upset down}
 mat_dn <- fun.mat(condition = "data$log2FoldChange <= 1")
 fun.upset(mat = mat_dn, col = "blue")
 ```
 
-Next it would be interesting to see the relationship to the cell wall related genes 
-```{r upset cell wall}
-cw <- read_tsv(here("data/analysis/cell-wall/goi-vst-expression_with-geneID.tsv"))
+## Cell wall integration
+It would be interesting to see the relationship to the cell wall related genes 
+
+#### {.tabset .unlisted .unnumbered .tabset-pills}
+
+##### All DE genes {-}
+```{r upset cell wall most}
+fun.upset(mat = mat, meta = TRUE)
 ```
 
+##### Up regulated DE genes {-}
+```{r upset cell wall up}
+fun.upset(mat = mat_up, meta = TRUE, col = "red")
+```
+
+##### Down regulated DE genes {-}
+```{r upset cell wall down}
+fun.upset(mat = mat_dn, meta = TRUE, col = "blue")
+```
+
+# Session Info
+<details><summary>Session Info</summary>
+```{r session info}
+sessionInfo()
+```
+</details>
+
+&nbsp;
