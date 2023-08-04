@@ -63,27 +63,22 @@ expression %<>% rename(B2_2_24hrs_D="B2_2_12hrs_D",B2_2_12hrs_D="B2_2_24hrs_D")
 goi <- unlist(annotation[grepl("cell wall",annotation$`Sequence Description`) | 
                            grepl("cell wall",annotation$`Annotation GO Term`),"Sequence Name"],use.names=FALSE)
 
-#' replace (\\.p\\d+$) .p followed by any number of digits. The $ the sign that indicates the end of the text
+# replace (\\.p\\d+$) .p followed by any number of digits. The $ the sign that indicates the end of the text
 goi <- sub("\\.p\\d+$","",goi)
 
-#' sanity
+# sanity
 stopifnot(length(goi)==length(unique(goi)))
 
 message(sprintf("There are %s candidates",length(goi)))
 
-#' * samples information
-samples <-read_tsv(here("doc/Samples-swap-corrected.tsv"),show_col_types = FALSE)
-
-#' ## Expression
+# Expression
 vst <- expression %>% filter(rowname %in% goi) %>% column_to_rownames() %>% as.matrix()
 sel <- rowSums(vst) > 0
 vst <- vst[sel,]
-
-samples <- samples[match(colnames(vst),samples$SampleID),]
+vst %<>% as.data.frame() %>% rownames_to_column(var = "ID")
 
 # Export
-# write_tsv(vst %>% as_tibble() %>% rownames_to_column("ID"),
-#           here("data/analysis/cell-wall/goi-vst-expression_with-geneID.tsv"))
+# write_tsv(vst, here("data/analysis/cell-wall/goi-vst-expression_with-geneID.tsv"))
 ```
 
 # Correlation
@@ -102,12 +97,10 @@ cw_cold <- cw %>% filter(treatment %in% "cold")
 
 colnames(vst) %<>% gsub(pattern = "B2_2_", replacement = "")
 colnames(vst) %<>%  gsub(pattern = "60min", replacement = "1hrs_")
-vst %<>% as.data.frame()
-vst$gene <- rownames(vst)
 
 #calculating the average expression of reps
-vst_avg <- vst %>% pivot_longer(cols = -gene, names_to = c("time", "rep"), names_sep = "_") %>%
-  group_by(time, gene) %>% 
+vst_avg <- vst %>% pivot_longer(cols = -ID, names_to = c("time", "rep"), names_sep = "_") %>%
+  group_by(time, ID) %>% 
   summarize(meanExp = mean(value)) %>% 
   pivot_wider(names_from = time, values_from = meanExp)
 
@@ -193,8 +186,8 @@ df %>%
 Next, we identify the mfuzz clusters associated with our highly correlated genes. 
 ```{r find relative mfuzz}
 #genes highly correlated with widths change in cold and control
-goi_cold <- vst_avg %>% filter(cold_cor >= 0.7 | cold_cor <= -0.7) %>% .$gene
-goi_ctrl <- vst_avg %>% filter(ctrl_cor >= 0.7 | ctrl_cor <= -0.7) %>% .$gene
+goi_cold <- vst_avg %>% filter(cold_cor >= 0.7 | cold_cor <= -0.7) %>% .$ID
+goi_ctrl <- vst_avg %>% filter(ctrl_cor >= 0.7 | ctrl_cor <= -0.7) %>% .$ID
 
 #highly correlated genes that are only in cold (and not in control)
 goi_cold_only <- goi_cold[!goi_cold %in% goi_ctrl]
