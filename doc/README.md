@@ -19,15 +19,21 @@ Look at the changes in the overall transcriptome over time, with the intention o
 1. PCA on vst,blind=FALSE
     1. Probably done in BioQA - check src/R (use the right sample file)
     2. Redo with vst aware data
-2. DE more/ less cold exposure, GO, KEGG
+    3. ellipse?
+    4. Rm S/N (independent filtering) - DONE (unnecessary as filtering by taxonomy reduced the number of genes to ~50k)
+2. Heatmap
+    1. Order by time
+    2. Order genes
+3. DE more/ less cold exposure, GO, KEGG
+    1. Venn Diagram (acute (1) early(4-12), late(24-120))
     1. Check what was done in src/R
-    2. Identify cold response genes, but be wary of cell cycle!!!
+    2. Identify cold response genes, but be wary of cell cycle!!! - cold acclimation; response to cold; cellular response to cold (also Venn)
     3. plot that cold activation is time sensitive
     4. cell wall genes 4 vs. 0 and 120 vs. 0 (volcano plot)
-4. Generate upset plot (probably exists as Venns)
-5. Lipid / carbs
+4. Generate upset plot (probably exists as Venns) - no we want Venn
+5. Lipid / carbs (also Venn)
     1. As for sucrose synthase (that is done, check for more? Ask Olivia for lipids)
-6. Mfuzz on cold (done)
+6. Mfuzz on cold (done, what figure?)
 7. cold shock proteins (probably check the annotation / literature?)
 8. cold response genes (probably check the annotation / literature?) that are irresponsive in that dataset
 9. cell wall genes (done)
