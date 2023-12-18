@@ -58,7 +58,7 @@ suppressWarnings(annotation <- read_tsv(here("data/b2g/blast2go_20190117_export.
 #' ## Terms of interest
 go_annot <- annotation %>% select(`Annotation GO ID`,`Annotation GO Term`,`Annotation GO Category`) %>% 
   rename(ID=`Annotation GO ID`,Term=`Annotation GO Term`,Category=`Annotation GO Category`) %>% 
-  filter(!is.na(ID)) 
+  filter(!is.na(ID))
 
 go_annot <- tibble(ID=unlist(str_split(go_annot$ID,"\\|"),use.names=FALSE),
                    Term=unlist(str_split(go_annot$Term,"\\|"),use.names=FALSE),
@@ -136,7 +136,7 @@ hm <- heatmap.2(t(scale(t(expression))),
 #' #### Subsets
 #' 
 #' To look at the three cluster of interests, we cut the tree
-k<-3
+k <- 3
 pos <- cutree(as.hclust(hm$rowDendrogram),k=k)
 
 #' * Process the clusters
@@ -158,7 +158,8 @@ dev.null <- sapply(1:k,function(i,h,d,a,e){
   write_tsv(a %>% filter(`Sequence Name` %in% rownames(e[sel,])),
             file=here(outdir,paste0("cluster-",i,"-annotation.txt")))
   
-  line_plot(colData(d),e,rownames(e[sel,]))
+  line_plot(colData(d)[match(colnames(e),d$SampleID),],
+            e,rownames(e[sel,]))
   ggsave(file=here(outdir,paste0("cluster-",i,".pdf")),width=12,height=8)
   return(NULL)
 },hm,dds,annotation,expression)
@@ -194,6 +195,21 @@ dev.off()
 #' # Export
 write_tsv(expression %>% as_tibble() %>% rownames_to_column("ID"),
           here(outdir,"goi-vst-expression.tsv"))
+
+algae_annot <- annotation %>% 
+  select(`Sequence Name`,`Annotation GO ID`,`Annotation GO Term`,`Annotation GO Category`) %>%
+  filter(`Sequence Name` %in% rownames(vst)) %>% 
+  dplyr::rename(TxID=`Sequence Name`,GOID=`Annotation GO ID`,
+         Term=`Annotation GO Term`,Category=`Annotation GO Category`) %>% 
+  filter(!is.na(GOID))
+
+write_tsv(tibble(ID=unlist(str_split(algae_annot$GOID,"\\|"),use.names=FALSE),
+                   Term=unlist(str_split(algae_annot$Term,"\\|"),use.names=FALSE),
+                   Category=unlist(str_split(algae_annot$Category,"\\|"),use.names=FALSE)) %>% distinct(),
+          here(outdir,"algae_GO_ID-to-Term.tsv"))
+
+write_tsv(annotation %>% filter(`Sequence Name` %in% rownames(vst)),
+          here(outdir,"algae_annotation.tsv"))
 
 #' # Session Info
 #' ```{r session info, echo=FALSE}
