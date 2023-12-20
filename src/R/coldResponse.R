@@ -203,6 +203,8 @@ algae_annot <- annotation %>%
          Term=`Annotation GO Term`,Category=`Annotation GO Category`) %>% 
   filter(!is.na(GOID))
 
+write_tsv(algae_annot, here(outdir,"algae_GO_annotation.tsv"))
+
 write_tsv(tibble(ID=unlist(str_split(algae_annot$GOID,"\\|"),use.names=FALSE),
                    Term=unlist(str_split(algae_annot$Term,"\\|"),use.names=FALSE),
                    Category=unlist(str_split(algae_annot$Category,"\\|"),use.names=FALSE)) %>% distinct(),
