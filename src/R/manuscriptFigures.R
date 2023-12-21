@@ -15,6 +15,7 @@ suppressPackageStartupMessages({
   library(here)
   library(KEGGREST)
   library(magrittr)
+  library(pathview)
   library(S4Vectors)
   library(tidyverse)
 })
@@ -44,13 +45,13 @@ lipidTerms <- tibble(Term=scan(here("doc/Algae-selected-lipid-GO-terms.tsv"),wha
 #' Data manipulation
 #' 
 #' 1. we find the genes that are annotated with the terms
-lipidTerms$Position <- lapply(lipidTerms$Term,function(trm,ant){ant$TxID[grep(trm,ant$Term)]},annot)
+lipidTerms$Tx <- lapply(lipidTerms$Term,function(trm,ant){ant$TxID[grep(trm,ant$Term)]},annot)
 
 #' 2. we count them and remove terms that are not found (most likely Aman used the whole transcriptome and not the algae subset to look up the terms)
-lipidTerms %<>% mutate(Ntx=elementNROWS(lipidTerms$Position)) %>% filter(Ntx>0)
+lipidTerms %<>% mutate(Ntx=elementNROWS(lipidTerms$Tx)) %>% filter(Ntx>0)
 
 #' 3. we find how many are in the DEG lists
-lipidTerms %<>% bind_cols(sapply(sapply(degList,"[[","ID"),function(d,p){sapply(lapply(p,"%in%",d),sum)},lipidTerms$Position))
+lipidTerms %<>% bind_cols(sapply(sapply(degList,"[[","ID"),function(d,p){sapply(lapply(p,"%in%",d),sum)},lipidTerms$Tx))
 
 #' 4. We removed the absent ones
 lipidTerms %<>% filter(rowSums(lipidTerms[,names(degList)])>0)
@@ -64,14 +65,20 @@ lipidTerms %<>% bind_cols(freq)
 
 #' 6. We plot the frequency (0 to 0.5 to 1 - blue to white to red) as a heatmap, removed the
 #' dendrograms and clustering. Add the numbers as cell labels.
-gplots::heatmap.2(as.matrix(lipidTerms[,c("percent_acute","percent_early","percent_late")]),
+gplots::heatmap.2(rbind(c(percent_acute=0,percent_early=0.5,percent_late=1),
+                        as.matrix(lipidTerms[,c("percent_acute","percent_early","percent_late")])),
                   trace = "none",dendrogram="none",
                   Colv=FALSE,Rowv=FALSE,key=FALSE,
                   labCol = names(degList),margins=c(5,20),
-                  labRow = lipidTerms$Term,
+                  labRow = c("colour key",lipidTerms$Term),
+                  breaks = seq(0,1,0.01),
                   cexCol = 1,cexRow=1,notecol="black",
-                  cellnote=as.matrix(lipidTerms[,c("acute","early","late")]),
-                  col=hpal)
+                  cellnote=rbind(c("0%","50%","100%"),
+                                 as.matrix(lipidTerms[,c("acute","early","late")])),
+                  col=hpal,rowsep=1,sepcolor="white")
+
+write_tsv(lipidTerms %>% mutate(Tx=sapply(lipidTerms$Tx,paste,collapse="|")),
+          here("data/analysis/lipid/lipid_go_term_summary.tsv"))
 
 #' ### Carbohydrates
 carbohydrateTerms <- tibble(Term=scan(here("doc/Algae-selected-carbohydrate-GO-terms.tsv"),what="character",sep="\n"))
@@ -79,13 +86,13 @@ carbohydrateTerms <- tibble(Term=scan(here("doc/Algae-selected-carbohydrate-GO-t
 #' Data manipulation
 #' 
 #' 1. we find the genes that are annotated with the terms
-carbohydrateTerms$Position <- lapply(carbohydrateTerms$Term,function(trm,ant){ant$TxID[grep(trm,ant$Term)]},annot)
+carbohydrateTerms$Tx <- lapply(carbohydrateTerms$Term,function(trm,ant){ant$TxID[grep(trm,ant$Term)]},annot)
 
 #' 2. we count them and remove terms that are not found (most likely Aman used the whole transcriptome and not the algae subset to look up the terms)
-carbohydrateTerms %<>% mutate(Ntx=elementNROWS(carbohydrateTerms$Position)) %>% filter(Ntx>0)
+carbohydrateTerms %<>% mutate(Ntx=elementNROWS(carbohydrateTerms$Tx)) %>% filter(Ntx>0)
 
 #' 3. we find how many are in the DEG lists
-carbohydrateTerms %<>% bind_cols(sapply(sapply(degList,"[[","ID"),function(d,p){sapply(lapply(p,"%in%",d),sum)},carbohydrateTerms$Position))
+carbohydrateTerms %<>% bind_cols(sapply(sapply(degList,"[[","ID"),function(d,p){sapply(lapply(p,"%in%",d),sum)},carbohydrateTerms$Tx))
 
 #' 4. We removed the absent ones
 carbohydrateTerms %<>% filter(rowSums(carbohydrateTerms[,names(degList)])>0)
@@ -99,14 +106,20 @@ carbohydrateTerms %<>% bind_cols(freq)
 
 #' 6. We plot the frequency (0 to 0.5 to 1 - blue to white to red) as a heatmap, removed the
 #' dendrograms and clustering. Add the numbers as cell labels.
-gplots::heatmap.2(as.matrix(carbohydrateTerms[,c("percent_acute","percent_early","percent_late")]),
+gplots::heatmap.2(rbind(c(percent_acute=0,percent_early=0.5,percent_late=1),
+                        as.matrix(carbohydrateTerms[,c("percent_acute","percent_early","percent_late")])),
                   trace = "none",dendrogram="none",
                   Colv=FALSE,Rowv=FALSE,key=FALSE,
                   labCol = names(degList),margins=c(5,20),
-                  labRow = carbohydrateTerms$Term,
+                  labRow = c("colour key",carbohydrateTerms$Term),
+                  breaks = seq(0,1,0.01),
                   cexCol = 1,cexRow=1,notecol="black",
-                  cellnote=as.matrix(carbohydrateTerms[,c("acute","early","late")]),
-                  col=hpal)
+                  cellnote=rbind(c("0%","50%","100%"),
+                                 as.matrix(carbohydrateTerms[,c("acute","early","late")])),
+                  col=hpal,rowsep=1,sepcolor="white")
+
+write_tsv(carbohydrateTerms %>% mutate(Tx=sapply(carbohydrateTerms$Tx,paste,collapse="|")),
+          here("data/analysis/carbs/carbohydrates_go_term_summary.tsv"))
 
 #' ## Figure 4
 #' 
@@ -185,14 +198,27 @@ fAcids %<>% bind_cols(freq)
 
 #' 5. We plot the frequency (0 to 0.5 to 1 - blue to white to red) as a heatmap, removed the
 #' dendrograms and clustering. Add the numbers as cell labels.
-gplots::heatmap.2(as.matrix(fAcids[,c("percent_acute","percent_early","percent_late")]),
+gplots::heatmap.2(rbind(c(percent_acute=0,percent_early=0.5,percent_late=1),
+  as.matrix(fAcids[,c("percent_acute","percent_early","percent_late")])),
                   trace = "none",dendrogram="none",
                   Colv=FALSE,Rowv=FALSE,key=FALSE,
                   labCol = names(degList),margins=c(5,20),
-                  labRow = fAcids$PDESC,
+                  labRow = c("colour key",fAcids$PDESC),
+                  breaks = seq(0,1,0.01),
                   cexCol = 1,cexRow=1,notecol="black",
-                  cellnote=as.matrix(fAcids[,c("acute","early","late")]),
-                  col=hpal)
+                  cellnote=rbind(c("0%","50%","100%"),
+                                 as.matrix(fAcids[,c("acute","early","late")])),
+                  col=hpal,rowsep=1,sepcolor="white")
+
+#' 6. Write the results
+dir.create(here("data/analysis/kegg"),showWarnings=FALSE)
+write_tsv(fAcids %>% mutate(TX=sapply(fAcids$TX,paste,collapse="|")),
+          here("data/analysis/kegg/fatty_acids_pathways_summary.tsv"))
+
+#' ## Figure 6 (and 7)
+#' 
+#' Plotting the Fatty acid biosynthesis pathway: ec00061
+
 
 #' # Session Info
 #' ```{r session info, echo=FALSE}
