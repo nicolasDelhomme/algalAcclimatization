@@ -17,6 +17,7 @@ suppressPackageStartupMessages({
   library(magrittr)
   library(pathview)
   library(S4Vectors)
+  library(stringr)
   library(tidyverse)
 })
 
@@ -33,6 +34,19 @@ names(degList) <- c("acute","early","late")
 #' * Annotation
 annot <- read_tsv(here("data/analysis/cold-response/algae_GO_annotation.tsv"),
                   show_col_types=FALSE)
+
+#' * Expression
+load(here("data/analysis/salmon/dds-sample-swap-corrected.rda"))
+load(here("data/analysis/DE/vst-aware.rda"))
+dds$Response <- factor(levels=c("control","acute","early","late"),
+                       sub(".*hrs","late",
+                           gsub("12hrs|^4hrs","early",
+                                sub("60min","acute",
+                                    sub("std","control",dds$Time)))))
+
+scaledAvgExp <- t(scale(t(sapply(split.data.frame(t(vst),dds$Response),colMeans))))
+scaledAvgExp[is.nan(scaledAvgExp)] <- 0
+scaledAvgExp %<>% as.data.frame() %>% rownames_to_column("TxID") %>% as_tibble()
 
 #' # Figures
 #' 
@@ -217,8 +231,46 @@ write_tsv(fAcids %>% mutate(TX=sapply(fAcids$TX,paste,collapse="|")),
 
 #' ## Figure 6 (and 7)
 #' 
-#' Plotting the Fatty acid biosynthesis pathway: ec00061
+#' Plotting the Fatty acid biosynthesis pathway: ec00061 - we actually use the one for KEGG orthologs (ko)
+pspecies <- "ko"
+pnumber <- "00061"
 
+#' 1. we get the pathway information
+pwy <- keggGet(paste0(pspecies,pnumber))
+
+#' 2. Get the enzymes
+#'
+#' From the pathway
+#' 
+ko <- pwy[[1]]$ORTHOLOGY
+ko <- ko[grepl("EC",ko)]
+tb <- tibble(KO=names(ko),EC=ko) %>%
+  mutate(EC=sub("]","",sub(".*EC:","",EC))) %>% 
+  separate_longer_delim(EC," ")
+
+#' From the annotation
+ez <- eCannot %>% mutate(EC=str_sub(EC,4)) %>% 
+  filter(EC %in% (tb %>% select(EC) %>% distinct() %>% unlist(use.names=FALSE)) & PID==paste0("ec",pnumber))
+
+#' 3. Collate the expression values
+ez %<>% left_join(scaledAvgExp,by="TxID")
+
+#' 4. Summarise
+ez %<>% left_join(tb,by="EC",relationship = "many-to-many") %>% 
+  group_by(KO) %>% summarise(across(where(is_double),median))
+gdat <- ez %>% column_to_rownames("KO") %>% as.matrix()
+
+#' 5. plot
+pathview(
+  gene.data=gdat,
+  species = pspecies,
+  pathway.id = pnumber,
+  out.suffix = "fatty-acid-biosynthesis",
+  kegg.dir=here("data/analysis/kegg"))
+
+#' 6. mv the result file in the result folder
+outfile=list.files(here(),pattern=paste0(pspecies,pnumber,".*"))
+file.rename(outfile,here("data/analysis/kegg",outfile))
 
 #' # Session Info
 #' ```{r session info, echo=FALSE}
