@@ -266,7 +266,8 @@ pathview(
   species = pspecies,
   pathway.id = pnumber,
   out.suffix = "fatty-acid-biosynthesis",
-  kegg.dir=here("data/analysis/kegg"))
+  kegg.dir=here("data/analysis/kegg"),
+  low=c("blue","blue"))
 
 #' 6. mv the result file in the result folder
 outfile=list.files(here(),pattern=paste0(pspecies,pnumber,".*"))
