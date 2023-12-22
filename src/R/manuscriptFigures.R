@@ -21,6 +21,9 @@ suppressPackageStartupMessages({
   library(tidyverse)
 })
 
+#' * Helper functions
+source(here("UPSCb-common/src/R/featureSelection.R"))
+
 #' * Palette
 hpal <- colorRampPalette(c("blue","white","red"))(100)
 
@@ -44,12 +47,60 @@ dds$Response <- factor(levels=c("control","acute","early","late"),
                                 sub("60min","acute",
                                     sub("std","control",dds$Time)))))
 
+dds$RenameTime <- factor(levels=c("control","1hr","4hrs","12hrs","24hrs","72hrs","120hrs"),
+                         sub("60min","1hr",
+                             sub("std","control",dds$Time)))
+
 scaledAvgExp <- t(scale(t(sapply(split.data.frame(t(vst),dds$Response),colMeans))))
 scaledAvgExp[is.nan(scaledAvgExp)] <- 0
 scaledAvgExp %<>% as.data.frame() %>% rownames_to_column("TxID") %>% as_tibble()
 
 #' # Figures
 #' 
+#' ## Figure 2
+#' 
+conds <- dds$RenameTime
+sels <- rangeFeatureSelect(counts=vst,
+													 conditions=conds,
+													 nrep=3,
+													 plot=FALSE)
+vst.cutoff <- 1
+mat <- t(scale(t(vst[sels[[vst.cutoff+1]],])))
+colnames(mat) <- sub("60min","1hr",sub("std","control",paste0(dds$Time,"_",dds$Replicate)))
+#' Rearrange the column
+mat <- mat[,c("control_A","control_D","control_B","control_C",
+							"1hr_D","1hr_A","1hr_B","1hr_C",
+							"4hrs_D","4hrs_B","4hrs_A","4hrs_C",
+							"12hrs_D","12hrs_B","12hrs_A","12hrs_C",
+							"24hrs_D","24hrs_B","24hrs_A","24hrs_C",
+							"72hrs_D","72hrs_C","72hrs_B","72hrs_A",
+							"120hrs_C","120hrs_D","120hrs_A","120hrs_B")]
+
+#' annotation column
+col_anno <- str_sub(colnames(mat),end = -3) %>% as.data.frame()
+colnames(col_anno) <- "Time"
+col_anno$Time <- factor(col_anno$Time, levels=c("control","1hr","4hrs","12hrs","24hrs","72hrs","120hrs"))
+rownames(col_anno) <- colnames(mat)
+
+#' annotation colors
+col_anno_col = brewer.pal(nlevels(conds),"Dark2")
+names(col_anno_col) <- c("control","1hr","4hrs","12hrs","24hrs","72hrs","120hrs")
+col_anno_col=list(Time = col_anno_col)
+
+#' ### Heatmap
+hm2 <- pheatmap(mat,
+								color = hpal,
+								border_color = NA,
+								cluster_cols = FALSE,
+								clustering_distance_rows = "correlation",
+								clustering_method = "ward.D2",
+								annotation_col = col_anno,
+								show_rownames = FALSE,
+								labels_col = col_anno$Time,
+								angle_col = 90,
+								annotation_colors = col_anno_col,
+								legend = FALSE)
+
 #' ## Figure 3
 #'
 #' ### Lipids
