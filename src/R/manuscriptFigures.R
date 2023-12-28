@@ -34,6 +34,12 @@ degList <- lapply(sort(list.files(here("data/analysis/DE/Response"),pattern="*_g
 
 names(degList) <- c("acute","early","late")
 
+degListPerTimePoint <- lapply(sort(list.files(here("data/analysis/DE"),pattern="*vs_std_genes.csv",full.names=TRUE)),
+									read_csv,show_col_types = FALSE,skip=1,
+									col_names=c("ID","baseMean","log2FoldChange","lfcSE","stat","pvalue","padj"))
+
+names(degListPerTimePoint) <- c("120hrs_vs_ctrl","12hrs_vs_ctrl","24hrs_vs_ctrl","4hrs_vs_ctrl","1hr_vs_ctrl","72hrs_vs_ctrl")
+
 #' * Annotation
 annot <- read_tsv(here("data/analysis/cold-response/algae_GO_annotation.tsv"),
                   show_col_types=FALSE)
@@ -280,6 +286,50 @@ dir.create(here("data/analysis/kegg"),showWarnings=FALSE)
 write_tsv(fAcids %>% mutate(TX=sapply(fAcids$TX,paste,collapse="|")),
           here("data/analysis/kegg/fatty_acids_pathways_summary.tsv"))
 
+#' ## Figure 5
+#' 
+#' 1. Getting GO related to cold
+toicold <- annot[grepl("cold",annot$Term),c("GOID","Term")]
+toicold %<>% separate_longer_delim(everything(),delim="|") %>% distinct() %>% filter(grepl("cold",Term))
+
+message(sprintf("There are %s GO terms related to cold in the assembly",nrow(toicold)))
+knitr::kable(toicold)
+
+#' 2. Getting genes with GO related to cold
+goicold <- unlist(as.vector(annot[Reduce("|",lapply(toicold$GOID,grepl,annot$GOID)),"TxID"]))
+message(sprintf("There are %s candidates in the assembly",length(goicold)))
+
+#' 3. Counting cold-related genes in DEG
+countcold <- as.data.frame(matrix(data = 0, nrow = length(degList), ncol = 2, dimnames = list(names(degList),c("Up","Down"))))
+countcold$Up <- as.numeric(lapply(names(degList), function(x) sum((degList[[x]][["ID"]] %in% goicold)*(degList[[x]][["log2FoldChange"]] > 0))))
+countcold$Down <- as.numeric(lapply(names(degList), function(x) sum((degList[[x]][["ID"]] %in% goicold)*(degList[[x]][["log2FoldChange"]] < 0))))
+countcold$NonSig <- length(goicold) - countcold$Up - countcold$Down
+countcold$time <- rownames(countcold)
+
+countcoldtimepoint <- as.data.frame(matrix(data = 0, nrow = length(degListPerTimePoint), ncol = 2, dimnames = list(names(degListPerTimePoint),c("Up","Down"))))
+countcoldtimepoint$Up <- as.numeric(lapply(names(degListPerTimePoint), function(x) sum((degListPerTimePoint[[x]][["ID"]] %in% goicold)*(degListPerTimePoint[[x]][["log2FoldChange"]] > 0))))
+countcoldtimepoint$Down <- as.numeric(lapply(names(degListPerTimePoint), function(x) sum((degListPerTimePoint[[x]][["ID"]] %in% goicold)*(degListPerTimePoint[[x]][["log2FoldChange"]] < 0))))
+countcoldtimepoint$NonSig <- length(goicold) - countcoldtimepoint$Up - countcoldtimepoint$Down
+countcoldtimepoint$time <- rownames(countcoldtimepoint)
+
+#' 4. Plotting
+dat <- melt(countcold)
+dat$DE <- factor(dat$variable, levels = c("Up","NonSig","Down"))
+ggplot(dat,aes(y=value,x=time,fill=DE)) +
+	geom_col(position = "dodge") +
+	xlab("Response") +
+	ylab("Number of cold-related differentially expressed genes") +
+	ggtitle("Cold related genes: per response")
+
+dat <- melt(countcoldtimepoint)
+dat$DE <- factor(dat$variable, levels = c("Up","NonSig","Down"))
+dat$time <- factor(dat$time,levels = c("1hr_vs_ctrl","4hrs_vs_ctrl","12hrs_vs_ctrl","24hrs_vs_ctrl","72hrs_vs_ctrl","120hrs_vs_ctrl"))
+ggplot(dat,aes(y=value,x=time,fill=DE)) +
+	geom_col(position = "dodge") +
+	xlab("Time") +
+	ylab("Number of cold-related differentially expressed genes") +
+	ggtitle("Cold related genes: per timepoint")
+
 #' ## Figure 6 (and 7)
 #' 
 #' Plotting the Fatty acid biosynthesis pathway: ec00061 - we actually use the one for KEGG orthologs (ko)
@@ -323,6 +373,77 @@ pathview(
 #' 6. mv the result file in the result folder
 outfile=list.files(here(),pattern=paste0(pspecies,pnumber,".*"))
 file.rename(outfile,here("data/analysis/kegg",outfile))
+
+#' ## Figure 8
+#' 
+#' 1. Getting GO related to cell wall
+toicellwall <- annot[grepl("cell wall",annot$Term),c("GOID","Term")]
+toicellwall %<>% separate_longer_delim(everything(),delim="|") %>% distinct() %>% filter(grepl("cell wall",Term))
+
+message(sprintf("There are %s GO terms related to cold in the assembly",nrow(toicellwall)))
+knitr::kable(toicellwall)
+
+#' 2. Getting genes with GO related to cold
+goicellwall <- unlist(as.vector(annot[Reduce("|",lapply(toicellwall$GOID,grepl,annot$GOID)),"TxID"]))
+message(sprintf("There are %s candidates in the assembly",length(goicellwall)))
+
+#' 3. Counting cold-related genes in DEG
+countcellwall <- as.data.frame(matrix(data = 0, nrow = length(degList), ncol = 2, dimnames = list(names(degList),c("Up","Down"))))
+countcellwall$Up <- as.numeric(lapply(names(degList), function(x) sum((degList[[x]][["ID"]] %in% goicellwall)*(degList[[x]][["log2FoldChange"]] > 0))))
+countcellwall$Down <- as.numeric(lapply(names(degList), function(x) sum((degList[[x]][["ID"]] %in% goicellwall)*(degList[[x]][["log2FoldChange"]] < 0))))
+countcellwall$NonSig <- length(goicellwall) - countcellwall$Up - countcellwall$Down
+countcellwall$time <- rownames(countcellwall)
+
+countcellwalltimepoint <- as.data.frame(matrix(data = 0, nrow = length(degListPerTimePoint), ncol = 2, dimnames = list(names(degListPerTimePoint),c("Up","Down"))))
+countcellwalltimepoint$Up <- as.numeric(lapply(names(degListPerTimePoint), function(x) sum((degListPerTimePoint[[x]][["ID"]] %in% goicellwall)*(degListPerTimePoint[[x]][["log2FoldChange"]] > 0))))
+countcellwalltimepoint$Down <- as.numeric(lapply(names(degListPerTimePoint), function(x) sum((degListPerTimePoint[[x]][["ID"]] %in% goicellwall)*(degListPerTimePoint[[x]][["log2FoldChange"]] < 0))))
+countcellwalltimepoint$NonSig <- length(goicellwall) - countcellwalltimepoint$Up - countcellwalltimepoint$Down
+countcellwalltimepoint$time <- rownames(countcellwalltimepoint)
+
+countcellwall$sample <- factor(rownames(countcellwall),levels = c("60min_vs_std","4hrs_vs_std","12hrsvs_std","24hrs_vs_std","72hrs_vs_std","120hrs_vs_std"))
+#' 4. Plotting the expression
+dat <- melt(countcellwall)
+dat$DE <- factor(dat$variable, levels = c("Up","NonSig","Down"))
+ggplot(dat,aes(y=value,x=time,fill=DE)) +
+	geom_col(position = "dodge") +
+	xlab("Response") +
+	ylab("Number of cell wall-related differentially expressed genes") +
+	ggtitle("Cellwall related genes: per response")
+
+dat <- melt(countcellwalltimepoint)
+dat$DE <- factor(dat$variable, levels = c("Up","NonSig","Down"))
+dat$time <- factor(dat$time,levels = c("1hr_vs_ctrl","4hrs_vs_ctrl","12hrs_vs_ctrl","24hrs_vs_ctrl","72hrs_vs_ctrl","120hrs_vs_ctrl"))
+ggplot(dat,aes(y=value,x=time,fill=DE)) +
+	geom_col(position = "dodge") +
+	xlab("Time") +
+	ylab("Number of cell wall-related differentially expressed genes") +
+	ggtitle("Cellwall related genes: per timepoint")
+
+#' 5. Reading cell wall thickness
+cellwallthickness <- reshape(read.table(here("doc/Cell-wall-measurement.tsv"),header = TRUE), idvar = "time_in_hours", timevar = "treatment", direction = "wide")
+cellwallthickness$minus <- cellwallthickness$width_in_um.cold - cellwallthickness$width_in_um.control
+cellwallthickness$divide <- cellwallthickness$width_in_um.cold / cellwallthickness$width_in_um.control
+cellwallthickness$time_in_hours <- factor(cellwallthickness$time_in_hours, levels = c(1,4,12,24,48,72,120,240))
+
+#' 6. Plotting expression with cellwall thickness
+dat <- countcellwalltimepoint %>% 
+	select(Up, Down, time) %>%
+	mutate(Down = (-1)*Down) %>%
+	melt()
+dat$time <- factor(dat$time,levels = c("1hr_vs_ctrl","4hrs_vs_ctrl","12hrs_vs_ctrl","24hrs_vs_ctrl","72hrs_vs_ctrl","120hrs_vs_ctrl"))
+dat$DE <- factor(dat$variable, levels = c("Down","Up"))
+
+dat2 <- cellwallthickness[(cellwallthickness$time_in_hours != 240)&(cellwallthickness$time_in_hours != 48),1:3]
+dat2$time <- factor(c("1hr_vs_ctrl","4hrs_vs_ctrl","12hrs_vs_ctrl","24hrs_vs_ctrl","72hrs_vs_ctrl","120hrs_vs_ctrl"),levels = c("1hr_vs_ctrl","4hrs_vs_ctrl","12hrs_vs_ctrl","24hrs_vs_ctrl","72hrs_vs_ctrl","120hrs_vs_ctrl"))
+
+ggplot() + geom_col(data=dat,mapping = aes(y=value,x=time,fill=DE)) +
+	geom_line(data=dat2,group=1,mapping=aes(x=time,y=width_in_um.control*200,colour="control"),size = 1) +
+	geom_line(data=dat2,group=1,mapping=aes(x=time,y=width_in_um.cold*200,colour="cold"),size = 1) +
+	xlab("Time") +
+	scale_y_continuous(name = "Number of cell wall-related differentially expressed genes",
+										 sec.axis = sec_axis(trans = ~ . / 200,
+										 										name = "Mean cell wall thickness (um)")) +
+	scale_color_manual(name = "Cell wall thickness", values = c("control" = "brown", "cold" = "darkgreen"))
 
 #' # Session Info
 #' ```{r session info, echo=FALSE}
